@@ -28,6 +28,7 @@ use language::{LanguageAwareStyling, language_settings::LanguageSettings};
 
 use menu::{Cancel, SelectFirst, SelectLast, SelectNext, SelectPrevious};
 use std::{
+    borrow::Cow,
     cmp,
     hash::Hash,
     ops::Range,
@@ -60,6 +61,7 @@ use workspace::{
     searchable::{SearchEvent, SearchableItem},
 };
 use worktree::{PathProgress, PathTarget, WorktreeId};
+use zed_i18n::t;
 
 use crate::outline_panel_settings::OutlinePanelSettingsScrollbarProxy;
 
@@ -1072,7 +1074,7 @@ impl OutlinePanel {
         cx.new(|cx| {
             let filter_editor = cx.new(|cx| {
                 let mut editor = Editor::single_line(window, cx);
-                editor.set_placeholder_text("Search buffer symbols…", window, cx);
+                editor.set_placeholder_text(&t!("outline_panel.filter.placeholder"), window, cx);
                 editor
             });
             let filter_update_subscription = cx.subscribe_in(
@@ -1812,17 +1814,29 @@ impl OutlinePanel {
                     ui::utils::reveal_in_file_manager_label(false),
                     Box::new(RevealInFileManager),
                 )
-                .action("Open in Terminal", Box::new(OpenInTerminal))
+                .action(
+                    t!("outline_panel.context_menu.open_in_terminal"),
+                    Box::new(OpenInTerminal),
+                )
                 .when(is_unfoldable, |menu| {
-                    menu.action("Unfold Directory", Box::new(UnfoldDirectory))
+                    menu.action(
+                        t!("outline_panel.context_menu.unfold_directory"),
+                        Box::new(UnfoldDirectory),
+                    )
                 })
                 .when(is_foldable, |menu| {
-                    menu.action("Fold Directory", Box::new(FoldDirectory))
+                    menu.action(
+                        t!("outline_panel.context_menu.fold_directory"),
+                        Box::new(FoldDirectory),
+                    )
                 })
                 .separator()
-                .action("Copy Path", Box::new(zed_actions::workspace::CopyPath))
                 .action(
-                    "Copy Relative Path",
+                    t!("outline_panel.context_menu.copy_path"),
+                    Box::new(zed_actions::workspace::CopyPath),
+                )
+                .action(
+                    t!("outline_panel.context_menu.copy_relative_path"),
                     Box::new(zed_actions::workspace::CopyRelativePath),
                 )
         });
@@ -2696,9 +2710,9 @@ impl OutlinePanel {
                             .map(|icon| icon.color(color).into_any_element());
                             (icon, name)
                         }
-                        None => (None, "Untitled".to_string()),
+                        None => (None, t!("outline_panel.entry.untitled").to_string()),
                     },
-                    None => (None, "Unknown buffer".to_string()),
+                    None => (None, t!("outline_panel.entry.unknown_buffer").to_string()),
                 };
                 (
                     ElementId::from(("buffer", external_file.buffer_id.to_proto())),
@@ -2924,16 +2938,20 @@ impl OutlinePanel {
         h_flex()
             .id("expand-collapse")
             .role(gpui::Role::Button)
-            .aria_label(if is_expanded { "Collapse" } else { "Expand" })
+            .aria_label(if is_expanded {
+                t!("outline_panel.aria.collapse")
+            } else {
+                t!("outline_panel.aria.expand")
+            })
             .aria_expanded(is_expanded)
             .flex_none()
             .cursor_pointer()
             .rounded_sm()
             .hover(|style| style.bg(cx.theme().colors().ghost_element_hover))
             .tooltip(Tooltip::text(if is_expanded {
-                "Collapse"
+                t!("outline_panel.aria.collapse")
             } else {
-                "Expand"
+                t!("outline_panel.aria.expand")
             }))
             .on_click(
                 cx.listener(move |panel, event: &gpui::ClickEvent, window, cx| {
@@ -5263,9 +5281,9 @@ impl OutlinePanel {
     ) -> impl IntoElement {
         let contents = if self.cached_entries.is_empty() {
             let header = if query.is_some() {
-                "No matches for query"
+                t!("outline_panel.empty_state.no_matches")
             } else {
-                "No outlines available"
+                t!("outline_panel.empty_state.no_outlines")
             };
 
             v_flex()
@@ -5288,7 +5306,10 @@ impl OutlinePanel {
                     h_flex()
                         .gap_1()
                         .justify_center()
-                        .child(Label::new("Toggle Panel With").color(Color::Muted))
+                        .child(
+                            Label::new(t!("outline_panel.empty_state.toggle_panel_with"))
+                                .color(Color::Muted),
+                        )
                         .child({
                             let key_binding = match self.position(window, cx) {
                                 DockPosition::Left => {
@@ -5460,10 +5481,14 @@ impl OutlinePanel {
     }
 
     fn render_filter_footer(&mut self, pinned: bool, cx: &mut Context<Self>) -> Div {
-        let (pin_button_id, icon, icon_tooltip) = if pinned {
-            ("unpin_button", IconName::Unpin, "Unpin Outline")
+        let (pin_button_id, icon, icon_tooltip): (&str, IconName, Cow<'static, str>) = if pinned {
+            (
+                "unpin_button",
+                IconName::Unpin,
+                t!("outline_panel.footer.unpin"),
+            )
         } else {
-            ("pin_button", IconName::Pin, "Pin Active Outline")
+            ("pin_button", IconName::Pin, t!("outline_panel.footer.pin"))
         };
 
         let has_query = self.query(cx).is_some();
@@ -5498,7 +5523,7 @@ impl OutlinePanel {
                         this.child(
                             IconButton::new("clear_filter", IconName::Close)
                                 .shape(IconButtonShape::Square)
-                                .tooltip(Tooltip::text("Clear Filter"))
+                                .tooltip(Tooltip::text(t!("outline_panel.filter.clear")))
                                 .on_click(cx.listener(|outline_panel, _, window, cx| {
                                     outline_panel.filter_editor.update(cx, |editor, cx| {
                                         editor.set_text("", window, cx);
@@ -5781,7 +5806,7 @@ impl Render for OutlinePanel {
                         .gap_0p5()
                         .border_b_1()
                         .border_color(cx.theme().colors().border_variant)
-                        .child(Label::new("Searching:").color(Color::Muted))
+                        .child(Label::new(t!("outline_panel.filter.searching")).color(Color::Muted))
                         .child(Label::new(query_text)),
                 )
             })

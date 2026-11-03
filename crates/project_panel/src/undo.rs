@@ -151,6 +151,7 @@ use workspace::{
     },
 };
 use worktree::{CreatedEntry, Worktree};
+use zed_i18n::t;
 
 enum Operation {
     Trash(ProjectPath),
@@ -428,14 +429,15 @@ enum UndoMessage {
 }
 
 impl UndoMessage {
-    fn error_title(&self) -> &'static str {
+    fn error_title(&self) -> String {
         match self {
             UndoMessage::Changed(_) => {
-                "this is a bug in the manage_undo_and_redo task please report"
+                t!("project_panel.undo.bug_report")
             }
-            UndoMessage::Undo => "Undo Failed",
-            UndoMessage::Redo => "Redo Failed",
+            UndoMessage::Undo => t!("project_panel.undo.undo_failed"),
+            UndoMessage::Redo => t!("project_panel.undo.redo_failed"),
         }
+        .to_string()
     }
 }
 

@@ -4,8 +4,10 @@ mod editable_setting_control;
 mod editorconfig_store;
 mod granted_write_path;
 mod keymap_file;
+mod schema_localization;
 mod settings_file;
 mod settings_store;
+mod ui_language_setting;
 mod vscode_import;
 
 pub use settings_macros::RegisterSetting;
@@ -43,6 +45,7 @@ pub use keymap_file::{
     KeyBindingValidator, KeyBindingValidatorRegistration, KeybindSource, KeybindUpdateOperation,
     KeybindUpdateTarget, KeymapFile, KeymapFileLoadResult,
 };
+pub use schema_localization::localized_schema;
 pub use settings_file::*;
 pub use settings_json::*;
 pub use settings_store::{
@@ -50,6 +53,7 @@ pub use settings_store::{
     LocalSettingsKind, LocalSettingsPath, MigrationStatus, Settings, SettingsFile,
     SettingsJsonSchemaParams, SettingsKey, SettingsLocation, SettingsParseResult, SettingsStore,
 };
+pub use ui_language_setting::*;
 
 pub use vscode_import::{VsCodeSettings, VsCodeSettingsSource};
 

@@ -43,6 +43,7 @@ vim_mode_setting.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true
 zlog.workspace = true
+zed_i18n.workspace = true
 
 [dev-dependencies]
 db = {workspace = true, features = ["test-support"]}

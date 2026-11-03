@@ -5,6 +5,7 @@ use notifications::status_toast::StatusToast;
 use proto::RpcError;
 use ui::prelude::*;
 use workspace::Workspace;
+use zed_i18n::t;
 
 pub fn open_output(
     operation: impl Into<SharedString>,
@@ -56,7 +57,7 @@ pub fn show_error_toast(
                             .size(IconSize::Small)
                             .color(Color::Error),
                     )
-                    .action("View Log", move |window, cx| {
+                    .action(t!("git_ui_core.view_log"), move |window, cx| {
                         let message = message.clone();
                         let action = action.clone();
                         workspace_weak

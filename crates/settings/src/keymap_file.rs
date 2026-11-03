@@ -867,7 +867,9 @@ impl KeymapFile {
             }),
         );
 
-        generator.root_schema_for::<KeymapFile>().to_value()
+        crate::schema_localization::localized_schema(
+            generator.root_schema_for::<KeymapFile>().to_value(),
+        )
     }
 
     pub fn sections(&self) -> impl DoubleEndedIterator<Item = &KeymapSection> {

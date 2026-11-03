@@ -52,6 +52,7 @@ zed_actions.workspace = true
 itertools.workspace = true
 ztracing.workspace = true
 tracing.workspace = true
+zed_i18n.workspace = true
 
 [dev-dependencies]
 editor = { workspace = true, features = ["test-support"] }

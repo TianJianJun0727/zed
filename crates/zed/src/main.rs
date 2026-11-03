@@ -75,8 +75,10 @@ use workspace::{
 use zed::{
     OpenListener, OpenRequest, RawOpenRequest, app_menus, build_window_options,
     derive_paths_with_position, edit_prediction_registry, handle_cli_connection,
-    handle_keymap_file_changes, initialize_workspace, open_paths_with_positions,
+    handle_keymap_file_changes, handle_ui_language_changes, initialize_workspace,
+    open_paths_with_positions,
 };
+use zed_i18n::t;
 
 use crate::zed::{CrashHandler, OpenRequestKind, eager_load_active_theme_and_icon_theme};
 
@@ -131,9 +133,9 @@ fn files_not_created_on_launch(errors: HashMap<io::ErrorKind, Vec<&Path>>) {
                     .update(cx, |_, window, cx| {
                         let response = window.prompt(
                             gpui::PromptLevel::Critical,
-                            message,
+                            &t!("zed.startup.launch_failed"),
                             Some(&error_details),
-                            &["Exit"],
+                            &[gpui::PromptButton::new(t!("zed.common.exit"))],
                             cx,
                         );
 
@@ -173,16 +175,21 @@ fn fail_to_open_window(e: anyhow::Error, _cx: &mut App) {
             };
 
             let notification_id = "dev.zed.Oops";
+            // 桌面通知标题与正文走 i18n;eprintln 输出属日志,保持英文
+            // Desktop notification title/body are localized; the eprintln
+            // output above is a log line and stays in English.
+            let summary = t!("zed.startup.launch_failed");
+            let body = t!(
+                "zed.startup.linux_launch_failed_body",
+                error = format!("{e:?}")
+            );
+            // t! 返回 Cow<'static, str>，不能调用 .as_str()（str::as_str
+            // 仍是 unstable，E0658）；改用解引用强制转换取 &str。
             proxy
                 .add_notification(
                     notification_id,
-                    Notification::new("Zed failed to launch")
-                        .body(Some(
-                            format!(
-                                "{e:?}. See https://zed.dev/docs/linux for troubleshooting steps."
-                            )
-                            .as_str(),
-                        ))
+                    Notification::new(&summary)
+                        .body(Some(&*body))
                         .priority(Priority::High)
                         .icon(ashpd::desktop::Icon::with_names(&[
                             "dialog-question-symbolic",
@@ -200,6 +207,10 @@ static STARTUP_TIME: OnceLock<Instant> = OnceLock::new();
 
 fn main() {
     STARTUP_TIME.get_or_init(|| Instant::now());
+
+    // 初始化界面国际化(跟随系统语言),必须在任何 UI 构建之前完成
+    // Initialize UI i18n (system locale) before any UI is built.
+    zed_i18n::init();
 
     // If this process was re-executed as a Linux sandbox helper, run that mode
     // without returning. Must run before argument parsing: the wrapped command's
@@ -498,6 +509,10 @@ fn main() {
         zlog_settings::init(cx);
         zed::watch_settings_files(fs.clone(), cx);
         handle_keymap_file_changes(user_keymap_file_rx, user_keymap_watcher, cx);
+        // 按用户设置应用界面语言并监听后续切换(在设置加载之后、UI 构建之前)
+        // Apply the configured UI language and watch for later switches
+        // (after settings are loaded, before the UI is built).
+        handle_ui_language_changes(cx);
 
         let user_agent = format!(
             "Zed/{} ({}; {})",
@@ -1480,12 +1495,9 @@ pub(crate) async fn restore_or_create_workspace(
 
         if error_count > 0 {
             let message = if error_count == 1 {
-                "Failed to restore 1 workspace. Check logs for details.".to_string()
+                t!("zed.toast.restore_failed_one").to_string()
             } else {
-                format!(
-                    "Failed to restore {} workspaces. Check logs for details.",
-                    error_count
-                )
+                t!("zed.toast.restore_failed_many", count = error_count)
             };
 
             // Try to find an active workspace to show the toast
@@ -2043,9 +2055,46 @@ fn dump_all_gpui_actions() {
     let schema_definitions = serde_json::to_value(generator.definitions())
         .expect("Failed to serialize schema definitions");
 
+    let action_names = actions.iter().map(|action| action.name).collect::<Vec<_>>();
+    let documentation = actions
+        .iter()
+        .filter_map(|action| {
+            action
+                .documentation
+                .map(|description| (action.name, description))
+        })
+        .collect::<HashMap<_, _>>();
+    let params = settings::SettingsJsonSchemaParams {
+        language_names: &[],
+        font_names: &[],
+        theme_names: &[],
+        icon_theme_names: &[],
+        lsp_adapter_names: &[],
+        action_names: &action_names,
+        action_documentation: &documentation,
+        deprecations: &HashMap::default(),
+        deprecation_messages: &HashMap::default(),
+    };
+
+    let mut localized_schemas = serde_json::Map::new();
+    for locale in ["en", "zh-CN", "pseudo"] {
+        zed_i18n::set_ui_locale(locale);
+        localized_schemas.insert(
+            locale.to_owned(),
+            serde_json::json!({
+                "settings": settings::SettingsStore::json_schema(&params),
+                "project_settings": settings::SettingsStore::project_json_schema(&params),
+                "keymap": settings::KeymapFile::generate_json_schema_from_inventory(),
+                "feature_flags": settings::localized_schema(feature_flags::generate_feature_flags_schema().to_value()),
+            }),
+        );
+    }
+    zed_i18n::set_ui_locale("en");
+
     let output = serde_json::json!({
         "actions": actions,
         "schema_definitions": schema_definitions,
+        "localized_schemas": localized_schemas,
     });
 
     io::Write::write(

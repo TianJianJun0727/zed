@@ -23,6 +23,7 @@ serde_json.workspace = true
 schemars.workspace = true
 text.workspace = true
 util.workspace = true
+zed_i18n.workspace = true
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

@@ -46,6 +46,7 @@ workspace.workspace = true
 zed_actions.workspace = true
 zeroize.workspace = true
 ztracing.workspace = true
+zed_i18n.workspace = true
 
 [dev-dependencies]
 editor = { workspace = true, features = ["test-support"] }

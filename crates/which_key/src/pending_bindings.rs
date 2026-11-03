@@ -7,6 +7,7 @@ use ui::{
     Divider, DividerColor, GradientFade, KeyBinding, LabelSize, WithScrollbar, prelude::*,
     text_for_keybinding_keystrokes,
 };
+use zed_i18n::t;
 
 use crate::PendingBinding;
 
@@ -92,7 +93,7 @@ fn group_bindings(bindings: Vec<PendingBinding>) -> Vec<PendingBindingRow> {
             );
             result.push(PendingBindingRow {
                 keystrokes: Rc::from([first_keystroke]),
-                action_name: format!("+{longer_count} keybinds").into(),
+                action_name: t!("which_key.keybinds_count", count = longer_count).into(),
                 is_group: true,
             });
         } else {

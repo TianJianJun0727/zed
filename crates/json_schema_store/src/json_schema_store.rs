@@ -37,11 +37,6 @@ static INSPECTOR_STYLE_SCHEMA: LazyLock<String> = LazyLock::new(|| {
         .expect("Inspector style schema should serialize")
 });
 
-static KEYMAP_SCHEMA: LazyLock<String> = LazyLock::new(|| {
-    serde_json::to_string(&settings::KeymapFile::generate_json_schema_from_inventory())
-        .expect("Keymap schema should serialize")
-});
-
 static ACTION_SCHEMA_CACHE: LazyLock<RwLock<HashMap<String, String>>> =
     LazyLock::new(|| RwLock::new(HashMap::default()));
 
@@ -98,11 +93,31 @@ impl gpui::Global for SchemaStore {}
 enum ChangedSchemas {
     Settings,
     DebugTasks,
+    Language,
+}
+
+pub fn ui_language_changed(cx: &mut App) {
+    if cx.try_global::<SchemaStore>().is_some() {
+        cx.update_global::<SchemaStore, _>(|store, cx| {
+            store.notify_schema_changed(ChangedSchemas::Language, cx);
+        });
+    }
 }
 
 impl SchemaStore {
     fn notify_schema_changed(&mut self, changed_schemas: ChangedSchemas, cx: &mut App) {
         let uris_to_invalidate = match changed_schemas {
+            ChangedSchemas::Language => {
+                let mut uris = DYNAMIC_SCHEMA_CACHE
+                    .write()
+                    .drain()
+                    .map(|(uri, _)| uri)
+                    .collect::<Vec<_>>();
+                uris.extend(ACTION_SCHEMA_CACHE.write().drain().map(|(name, _)| {
+                    format!("{SCHEMA_URI_PREFIX}action/{}", normalize_action_name(&name))
+                }));
+                uris
+            }
             ChangedSchemas::Settings => {
                 let settings_uri_prefix = &format!("{SCHEMA_URI_PREFIX}settings");
                 let project_settings_uri = &format!("{SCHEMA_URI_PREFIX}project_settings");
@@ -178,7 +193,6 @@ fn resolve_static_schema(path: &str) -> Option<String> {
         "tasks" => Some(TASKS_SCHEMA.clone()),
         "snippets" => Some(SNIPPETS_SCHEMA.clone()),
         "jsonc" => Some(JSONC_SCHEMA.clone()),
-        "keymap" => Some(KEYMAP_SCHEMA.clone()),
         "zed_inspector_style" => {
             #[cfg(debug_assertions)]
             {
@@ -207,9 +221,9 @@ fn resolve_static_schema(path: &str) -> Option<String> {
             let mut generator = settings::KeymapFile::action_schema_generator();
             let schema =
                 settings::KeymapFile::get_action_schema_by_name(&action_name, &mut generator);
-            let json = serde_json::to_string(
-                &root_schema_from_action_schema(schema, &mut generator).to_value(),
-            )
+            let json = serde_json::to_string(&settings::localized_schema(
+                root_schema_from_action_schema(schema, &mut generator).to_value(),
+            ))
             .expect("Action schema should serialize");
 
             ACTION_SCHEMA_CACHE
@@ -395,7 +409,9 @@ async fn resolve_dynamic_schema(
             let schema = cx
                 .update(|cx| cx.action_schema_by_name(&action_name, &mut generator))
                 .flatten();
-            root_schema_from_action_schema(schema, &mut generator).to_value()
+            settings::localized_schema(
+                root_schema_from_action_schema(schema, &mut generator).to_value(),
+            )
         }
         "tasks" => task::TaskTemplates::generate_json_schema(),
         _ => {
@@ -519,7 +535,8 @@ fn inject_feature_flags_schema(schema: &mut serde_json::Value) {
         return;
     };
     let schema_name = settings::FeatureFlagsMap::schema_name();
-    let enriched = feature_flags::generate_feature_flags_schema().to_value();
+    let enriched =
+        settings::localized_schema(feature_flags::generate_feature_flags_schema().to_value());
     defs.insert(schema_name.into_owned(), enriched);
 }
 

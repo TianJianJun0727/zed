@@ -72,6 +72,7 @@ url.workspace = true
 util.workspace = true
 uuid.workspace = true
 zed_actions.workspace = true
+zed_i18n.workspace = true
 
 [dev-dependencies]
 client = { workspace = true, features = ["test-support"] }

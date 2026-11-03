@@ -1,0 +1,35 @@
+_version = 1
+
+[language_tools.lsp_button]
+language_servers_aria = "语言服务器"
+trust_required = "信任此项目后，语言服务器才能运行。"
+restricted_mode = "项目处于受限模式"
+restart_server = "重启服务器"
+stop_server = "停止服务器"
+view_logs = "查看日志"
+view_message = "查看消息"
+
+[language_tools.syntax_tree_view]
+no_language = "当前编辑器没有关联的语言"
+focus_editor = "聚焦到编辑器以显示新的树视图"
+not_attached = "未关联到编辑器"
+
+[language_tools.highlights_tree_view]
+all_filtered_out = "所有高亮都已被筛选掉"
+enable_hints = "请在工具栏中启用文本、语法或语义高亮"
+focus_editor = "聚焦到编辑器以显示高亮"
+no_highlights = "未找到高亮"
+no_token_highlights = "编辑器中没有文本、语法或语义标记高亮"
+not_attached = "未关联到编辑器"
+settings_tooltip = "高亮设置"
+
+[language_tools.key_context_view]
+current_context_stack = "当前上下文堆栈"
+edit_keymap_file = "编辑键位映射文件"
+key_equivalents = "等效按键"
+keyboard_context = "键盘上下文"
+last_keystroke = "上次按键"
+open_documentation = "打开文档"
+remapped_note = "使用某些字符定义的快捷键已重新映射，无需按住 Option 键即可输入。"
+view_default_keymap = "查看默认键位映射"
+view_description = "此视图用于确定创建自定义键位绑定时的当前上下文序列。触发快捷键时，它还会列出所有可能命中的上下文以及实际匹配的那一个。"

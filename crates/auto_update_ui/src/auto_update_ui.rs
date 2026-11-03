@@ -23,6 +23,7 @@ use workspace::{
     workspace_error::{ErrorAction, ErrorSeverity, WorkspaceError},
 };
 use zed_actions::ShowUpdateNotification;
+use zed_i18n::t;
 
 actions!(
     auto_update,
@@ -70,7 +71,7 @@ fn notify_release_notes_failed_to_show(
 
     impl WorkspaceError for ReleaseNotesError {
         fn primary_message(&self) -> SharedString {
-            "Couldn't load release notes".into()
+            t!("auto_update_ui.release_notes.load_failed").into()
         }
         fn severity(&self) -> ErrorSeverity {
             ErrorSeverity::Error
@@ -78,7 +79,9 @@ fn notify_release_notes_failed_to_show(
         fn primary_action(&self) -> ErrorAction {
             self.url
                 .clone()
-                .map(|url| ErrorAction::link("View in Browser", url))
+                .map(|url| {
+                    ErrorAction::link(t!("auto_update_ui.release_notes.view_in_browser"), url)
+                })
                 .unwrap_or_else(ErrorAction::dismiss)
         }
     }
@@ -324,17 +327,24 @@ fn show_update_notification(cx: &mut App) {
             move |cx| {
                 let workspace_handle = cx.entity().downgrade();
                 cx.new(|cx| {
-                    MessageNotification::new(format!("Updated to {app_name} {}", version), cx)
-                        .primary_message("View Release Notes")
-                        .primary_on_click(move |window, cx| {
-                            if let Some(workspace) = workspace_handle.upgrade() {
-                                workspace.update(cx, |workspace, cx| {
-                                    crate::view_release_notes_locally(workspace, window, cx);
-                                })
-                            }
-                            cx.emit(DismissEvent);
-                        })
-                        .show_suppress_button(false)
+                    MessageNotification::new(
+                        t!(
+                            "auto_update_ui.notification.updated_to",
+                            app = app_name,
+                            version = version
+                        ),
+                        cx,
+                    )
+                    .primary_message(t!("auto_update_ui.notification.view_release_notes"))
+                    .primary_on_click(move |window, cx| {
+                        if let Some(workspace) = workspace_handle.upgrade() {
+                            workspace.update(cx, |workspace, cx| {
+                                crate::view_release_notes_locally(workspace, window, cx);
+                            })
+                        }
+                        cx.emit(DismissEvent);
+                    })
+                    .show_suppress_button(false)
                 })
             },
         );

@@ -17,6 +17,7 @@ use ui::{
     Color, GradientFade, HighlightedLabel, Icon, IconButton, IconName, IconSize, Label, LabelSize,
     ListItem, ListItemSpacing, PopoverMenu, Tooltip, prelude::*, utils::replace_control_characters,
 };
+use zed_i18n::t;
 
 use crate::{
     TableView,
@@ -193,7 +194,7 @@ impl ColumnFilterDelegate {
         for (row_index, positions) in matches {
             if rows[row_index].hidden_by.is_some() && !header_inserted {
                 entries.push(ColumnFilterListEntry::Header(
-                    "Hidden by other filters".into(),
+                    t!("csv_preview.table_header.hidden_by_other_filters").into(),
                 ));
                 header_inserted = true;
             }
@@ -327,7 +328,11 @@ impl PickerDelegate for ColumnFilterDelegate {
     }
 
     fn placeholder_text(&self, _window: &mut Window, _cx: &mut App) -> Arc<str> {
-        format!("Search {} unique values…", self.available_count).into()
+        t!(
+            "csv_preview.table_header.search_unique_values",
+            count = self.available_count
+        )
+        .into()
     }
 
     fn update_matches(
@@ -520,7 +525,7 @@ impl PickerDelegate for ColumnFilterDelegate {
                         .id("table-filter-clear-all")
                         .cursor_pointer()
                         .child(
-                            Label::new("Clear all")
+                            Label::new(t!("csv_preview.table_header.clear_all"))
                                 .size(LabelSize::Small)
                                 .color(Color::Accent),
                         )
@@ -645,10 +650,10 @@ impl TableView {
         )
         .tooltip(Tooltip::text(match self.engine.applied_sorting {
             Some(ordering) if ordering.col_idx == col_idx => match ordering.direction {
-                SortDirection::Asc => "Sorted A-Z. Click to sort Z-A",
-                SortDirection::Desc => "Sorted Z-A. Click to disable sorting",
+                SortDirection::Asc => t!("csv_preview.table_header.sort_asc"),
+                SortDirection::Desc => t!("csv_preview.table_header.sort_desc"),
             },
-            _ => "Not sorted. Click to sort A-Z",
+            _ => t!("csv_preview.table_header.sort_none"),
         }))
         .on_click(cx.listener(move |this, _event, _window, cx| {
             let new_sorting = match this.engine.applied_sorting {
@@ -695,9 +700,9 @@ impl TableView {
             })
             .toggle_state(has_active_filters),
             Tooltip::text(if has_active_filters {
-                "Column has active filters. Click to manage"
+                t!("csv_preview.table_header.filter_active")
             } else {
-                "No filters applied. Click to add filters"
+                t!("csv_preview.table_header.filter_none")
             }),
         )
         .menu({

@@ -12,6 +12,7 @@ use workspace::Workspace;
 use workspace::notifications::NotificationId;
 use workspace::notifications::simple_message_notification::MessageNotification;
 use worktree::UpdatedEntriesSet;
+use zed_i18n::t;
 
 const DEV_CONTAINER_SUGGEST_KEY: &str = "dev_container_suggest_dismissed";
 
@@ -129,8 +130,9 @@ pub fn suggest_on_worktree_updated(
 
         workspace.show_notification(notification_id, cx, |cx| {
             cx.new(move |cx| {
-                let message: SharedString = format!(
-                    "{worktree_name} contains a Dev Container configuration file. Would you like to re-open it in a container?"
+                let message: SharedString = t!(
+                    "recent_projects.dev_container_suggest.message",
+                    worktree = worktree_name
                 )
                 .into();
                 let tooltip_text: SharedString = project_path.clone().into();
@@ -141,7 +143,9 @@ pub fn suggest_on_worktree_updated(
                         .tooltip(Tooltip::text(tooltip_text.clone()))
                         .into_any_element()
                 })
-                .primary_message("Yes, Open in Container")
+                .primary_message(t!(
+                    "recent_projects.dev_container_suggest.open_in_container"
+                ))
                 .primary_icon(IconName::Check)
                 .primary_icon_color(Color::Success)
                 .primary_on_click({
@@ -149,7 +153,7 @@ pub fn suggest_on_worktree_updated(
                         window.dispatch_action(Box::new(zed_actions::OpenDevContainer), cx);
                     }
                 })
-                .secondary_message("Don't Show Again")
+                .secondary_message(t!("recent_projects.dev_container_suggest.dont_show_again"))
                 .secondary_icon(IconName::Close)
                 .secondary_icon_color(Color::Error)
                 .secondary_on_click({
@@ -157,9 +161,7 @@ pub fn suggest_on_worktree_updated(
                         let key = key_for_dismiss.clone();
                         let kvp = KeyValueStore::global(cx);
                         cx.background_spawn(async move {
-                            kvp.write_kvp(key, "dismissed".to_string())
-                                .await
-                                .log_err();
+                            kvp.write_kvp(key, "dismissed".to_string()).await.log_err();
                         })
                         .detach();
                     }

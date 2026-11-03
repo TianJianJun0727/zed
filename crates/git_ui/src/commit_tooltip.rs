@@ -21,6 +21,7 @@ use theme_settings::ThemeSettings;
 use time::{OffsetDateTime, UtcOffset};
 use ui::{Avatar, Chip, CopyButton, Divider, Tooltip, prelude::*, tooltip_container};
 use workspace::Workspace;
+use zed_i18n::t;
 
 #[derive(Clone, Debug)]
 pub struct CommitDetails {
@@ -460,7 +461,7 @@ impl Render for CommitTooltip {
                                         .child(Divider::vertical())
                                         .child(
                                             CopyButton::new("copy-commit-sha", full_sha)
-                                                .tooltip_label("Copy SHA"),
+                                                .tooltip_label(t!("git_ui.common.copy_sha")),
                                         ),
                                 ),
                         ),
@@ -480,7 +481,7 @@ fn blame_entry_timestamp(blame_entry: &BlameEntry, format: time_format::Timestam
                 format,
             )
         }
-        Err(_) => "Error parsing date".to_string(),
+        Err(_) => t!("git_ui.common.error_parsing_date").to_string(),
     }
 }
 
@@ -524,45 +525,35 @@ pub(crate) fn shallow_boundary_notice(
                     )
                     .child(
                         div().flex_1().min_w_0().child(
-                            Label::new(
-                                "Shallow clone boundary: earlier history is missing, so these lines may come from an older commit.",
-                            )
-                            .size(LabelSize::Small)
-                            .line_height_style(LineHeightStyle::UiLabel),
+                            Label::new(t!("git_ui.commit_tooltip.shallow_boundary_note"))
+                                .size(LabelSize::Small)
+                                .line_height_style(LineHeightStyle::UiLabel),
                         ),
                     ),
             )
             .when(can_fetch, |this| {
                 this.child(
-                    h_flex()
-                        .gap_2()
-                        .child(div().w(avatar_width))
-                        .child(
-                            Button::new(
-                                "fetch-unshallow",
-                                if in_flight {
-                                    "Fetching…"
-                                } else {
-                                    "Fetch Missing History"
-                                },
-                            )
-                            .style(ButtonStyle::Outlined)
-                            .label_size(LabelSize::Small)
-                            .disabled(in_flight)
-                            .tooltip(Tooltip::text(
-                                "Run `git fetch --unshallow` to download the full history",
-                            ))
-                            .on_click(move |_, window, cx| {
-                                cx.stop_propagation();
-                                fetch_unshallow(
-                                    repository.clone(),
-                                    workspace.clone(),
-                                    window,
-                                    cx,
-                                )
+                    h_flex().gap_2().child(div().w(avatar_width)).child(
+                        Button::new(
+                            "fetch-unshallow",
+                            if in_flight {
+                                t!("git_ui.commit_tooltip.fetching")
+                            } else {
+                                t!("git_ui.commit_tooltip.fetch_missing_history")
+                            },
+                        )
+                        .style(ButtonStyle::Outlined)
+                        .label_size(LabelSize::Small)
+                        .disabled(in_flight)
+                        .tooltip(Tooltip::text(
+                            "Run `git fetch --unshallow` to download the full history",
+                        ))
+                        .on_click(move |_, window, cx| {
+                            cx.stop_propagation();
+                            fetch_unshallow(repository.clone(), workspace.clone(), window, cx)
                                 .detach_and_log_err(cx);
-                            }),
-                        ),
+                        }),
+                    ),
                 )
             }),
     )
@@ -620,7 +611,7 @@ pub(crate) fn fetch_unshallow(
                 Ok(_) => {
                     workspace.update(cx, |workspace, cx| {
                         let toast = StatusToast::new(
-                            "Fetched the missing commit history",
+                            t!("git_ui.commit_tooltip.fetched_history"),
                             cx,
                             |this, _| {
                                 this.icon(

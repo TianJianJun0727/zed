@@ -1345,9 +1345,11 @@ impl SettingsStore {
             });
         }
 
-        generator
-            .root_schema_for::<UserSettingsContent>()
-            .to_value()
+        crate::schema_localization::localized_schema(
+            generator
+                .root_schema_for::<UserSettingsContent>()
+                .to_value(),
+        )
     }
 
     /// Generate JSON schema for project settings, including only settings valid
@@ -1361,9 +1363,11 @@ impl SettingsStore {
         ProjectSettingsContent::json_schema(&mut generator);
         Self::configure_schema_generator(&mut generator, params);
 
-        generator
-            .root_schema_for::<ProjectSettingsContent>()
-            .to_value()
+        crate::schema_localization::localized_schema(
+            generator
+                .root_schema_for::<ProjectSettingsContent>()
+                .to_value(),
+        )
     }
 
     fn recompute_values(

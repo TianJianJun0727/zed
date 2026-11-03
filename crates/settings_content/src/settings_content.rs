@@ -308,6 +308,12 @@ pub struct SettingsContent {
 
     pub title_bar: Option<TitleBarSettingsContent>,
 
+    /// The display language of the Zed user interface.
+    /// Zed 用户界面的显示语言。
+    ///
+    /// Default: system
+    pub ui_language: Option<UiLanguageContent>,
+
     /// Whether or not to enable Vim mode.
     ///
     /// Default: false
@@ -412,7 +418,7 @@ fallible_options::flattened_deserialize!(SettingsContent {
         journal, log, line_indicator_format, language_models, copilot, outline_panel, project_panel,
         node, proxy, reduce_motion, server_url, credentials_url, session, telemetry, terminal,
         title_bar, vim_mode, calls, which_key, vim, modeline_lines, feature_flags,
-        instrumentation,
+        instrumentation, ui_language,
     },
     defaults: {},
 });
@@ -558,6 +564,37 @@ impl strum::VariantNames for BaseKeymapContent {
         "Cursor",
         "None",
     ];
+}
+
+/// Display language of the Zed user interface.
+/// Zed 用户界面的显示语言。
+///
+/// Default: system
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    MergeFrom,
+    PartialEq,
+    Eq,
+    Default,
+    strum::VariantArray,
+)]
+pub enum UiLanguageContent {
+    #[default]
+    #[serde(rename = "system")]
+    System,
+    #[serde(rename = "zh-CN")]
+    Chinese,
+    #[serde(rename = "en")]
+    English,
+}
+
+impl strum::VariantNames for UiLanguageContent {
+    const VARIANTS: &'static [&'static str] = &["System", "简体中文", "English"];
 }
 
 /// Configuration of audio in Zed.

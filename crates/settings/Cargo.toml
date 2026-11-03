@@ -36,6 +36,7 @@ settings_json = { workspace = true, features = ["editing"] }
 settings_macros.workspace = true
 smallvec.workspace = true
 util.workspace = true
+zed_i18n.workspace = true
 
 [dev-dependencies]
 fs = { workspace = true, features = ["test-support"] }

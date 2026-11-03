@@ -12,6 +12,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use theme_settings::ThemeSettings;
 use ui::{ContextMenu, Disclosure, IconButtonShape, Tooltip, prelude::*};
 use util::ResultExt;
+use zed_i18n::t;
 
 pub(crate) fn build_debugger_hover_view(
     debugger_value: Option<DebuggerHoverData>,
@@ -120,8 +121,8 @@ impl DebuggerHoverView {
                             .shape(IconButtonShape::Square)
                             .icon_size(IconSize::Small)
                             .icon_color(Color::Muted)
-                            .aria_label("Copy Value")
-                            .tooltip(Tooltip::text("Copy Value"))
+                            .aria_label(t!("editor.debugger_hover.copy_value"))
+                            .tooltip(Tooltip::text(t!("editor.debugger_hover.copy_value")))
                             .on_click(move |_, _, cx| {
                                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(
                                     value.clone(),
@@ -134,8 +135,8 @@ impl DebuggerHoverView {
                                 .shape(IconButtonShape::Square)
                                 .icon_size(IconSize::Small)
                                 .icon_color(Color::Muted)
-                                .aria_label("Add to Watch")
-                                .tooltip(Tooltip::text("Add to Watch"))
+                                .aria_label(t!("editor.debugger_hover.add_to_watch"))
+                                .tooltip(Tooltip::text(t!("editor.debugger_hover.add_to_watch")))
                                 .on_click(cx.listener(move |view, _, _, cx| {
                                     view.add_watch(expression.clone(), cx);
                                 })),
@@ -146,8 +147,8 @@ impl DebuggerHoverView {
                             .shape(IconButtonShape::Square)
                             .icon_size(IconSize::Small)
                             .icon_color(Color::Muted)
-                            .aria_label("Value Actions")
-                            .tooltip(Tooltip::text("Value Actions"))
+                            .aria_label(t!("editor.debugger_hover.value_actions"))
+                            .tooltip(Tooltip::text(t!("editor.debugger_hover.value_actions")))
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 view.variable_menu(variable.clone(), window, cx);
                             })),
@@ -292,18 +293,36 @@ impl DebuggerHoverView {
         let view = cx.entity().downgrade();
         let menu = ContextMenu::build(window, cx, |menu, _, _| {
             menu.key_context("menu DebuggerHoverMenu")
-                .entry("Copy Value", None, move |_, cx| {
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(variable.value.clone()));
-                })
+                .entry(
+                    t!("editor.debugger_hover.copy_value"),
+                    None,
+                    move |_, cx| {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                            variable.value.clone(),
+                        ));
+                    },
+                )
                 .when_some(variable.evaluate_name, |menu, expression| {
                     let watch_expression = expression.clone();
-                    menu.entry("Copy as Expression", None, move |_, cx| {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(expression.clone()));
-                    })
-                    .entry("Add to Watch", None, move |_, cx| {
-                        view.update(cx, |view, cx| view.add_watch(watch_expression.clone(), cx))
+                    menu.entry(
+                        t!("editor.debugger_hover.copy_as_expression"),
+                        None,
+                        move |_, cx| {
+                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                expression.clone(),
+                            ));
+                        },
+                    )
+                    .entry(
+                        t!("editor.debugger_hover.add_to_watch"),
+                        None,
+                        move |_, cx| {
+                            view.update(cx, |view, cx| {
+                                view.add_watch(watch_expression.clone(), cx)
+                            })
                             .log_err();
-                    })
+                        },
+                    )
                 })
         });
         menu.update(cx, |menu, cx| menu.select_toggled_or_first(window, cx));
@@ -348,7 +367,7 @@ impl DebuggerHoverView {
                 .flatten()
         });
         let Some(task) = task else {
-            self.operation_error = Some("The debug session is no longer paused here".into());
+            self.operation_error = Some(t!("editor.debugger_hover.session_not_paused").to_string());
             cx.notify();
             return;
         };

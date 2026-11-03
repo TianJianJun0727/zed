@@ -1,21 +1,21 @@
+use ui::{
+    ActiveTheme as _, AnyElement, Button, ButtonCommon as _, ButtonSize, ButtonStyle,
+    Clickable as _, Context, ElementId, IntoElement as _, ParentElement as _, SharedString,
+    Styled as _, StyledTypography as _, Tooltip, div,
+};
+use zed_i18n::t;
+
 use crate::{
     TableView,
     settings::RowIdentifiers,
     types::{DataRow, DisplayRow, LineNumber},
 };
-use ui::{
-    ActiveTheme as _, AnyElement, ButtonCommon as _, ButtonSize, Clickable, Context,
-    FluentBuilder as _, IconButton, IconButtonShape, IconName, IconSize, IntoElement as _,
-    ParentElement as _, SharedString, Styled as _, StyledTypography as _, Tooltip, div, h_flex,
-};
-
-use super::settings::settings_popover_menu;
 
 pub enum RowIdentDisplayMode {
     /// E.g
     /// ```text
     /// 1
-    /// -
+    /// ...
     /// 5
     /// ```
     Vertical,
@@ -107,49 +107,38 @@ impl TableView {
         &self,
         cx: &mut Context<'_, TableView>,
     ) -> AnyElement {
-        let has_line_numbers = !self.engine.contents.line_numbers.is_empty();
+        // First column: row identifier (clickable to toggle between Lines and Rows)
+        let row_identifier_text = match self.settings.numbering_type {
+            RowIdentifiers::SrcLines => t!("csv_preview.row_identifier.lines"),
+            RowIdentifiers::RowNum => t!("csv_preview.row_identifier.rows"),
+        };
 
-        h_flex()
-            .size_full()
-            .items_center()
-            .justify_center()
-            .gap_1()
-            .when(has_line_numbers, |row| {
-                // A dedicated toggle (rather than only exposing this in the settings popover) so
-                // toggling shows its effect on the row identifier column immediately, instead of
-                // being hidden behind the open popover until it's dismissed.
-                let (icon, tooltip_text) = match self.settings.numbering_type {
-                    RowIdentifiers::SrcLines => (
-                        IconName::Code,
-                        "Showing file line numbers.\nClick to show sequential row numbers.",
-                    ),
-                    RowIdentifiers::RowNum => (
-                        IconName::Hash,
-                        "Showing sequential row numbers.\nClick to show file line numbers.",
-                    ),
-                };
-
-                let view = cx.entity();
-                row.child(
-                    IconButton::new("row-identifier-toggle", icon)
-                        .shape(IconButtonShape::Square)
-                        .icon_size(IconSize::Small)
-                        .size(ButtonSize::Compact)
-                        .tooltip(Tooltip::text(tooltip_text))
-                        .on_click(move |_event, _window, cx| {
-                            view.update(cx, |this, cx| {
-                                this.settings.numbering_type = match this.settings.numbering_type {
-                                    RowIdentifiers::SrcLines => RowIdentifiers::RowNum,
-                                    RowIdentifiers::RowNum => RowIdentifiers::SrcLines,
-                                };
-                                this.sync_column_widths(cx);
-                                cx.notify();
-                            });
-                        }),
+        let view = cx.entity();
+        let value = div()
+            .font_buffer(cx)
+            .child(
+                Button::new(
+                    ElementId::Name("row-identifier-toggle".into()),
+                    row_identifier_text,
                 )
-            })
-            .child(settings_popover_menu(cx.entity()))
-            .into_any_element()
+                .style(ButtonStyle::Subtle)
+                .size(ButtonSize::Compact)
+                .tooltip(Tooltip::text(t!(
+                    "csv_preview.row_identifier.toggle_tooltip"
+                )))
+                .on_click(move |_event, _window, cx| {
+                    view.update(cx, |this, cx| {
+                        this.settings.numbering_type = match this.settings.numbering_type {
+                            RowIdentifiers::SrcLines => RowIdentifiers::RowNum,
+                            RowIdentifiers::RowNum => RowIdentifiers::SrcLines,
+                        };
+                        this.sync_column_widths(cx);
+                        cx.notify();
+                    });
+                }),
+            )
+            .into_any_element();
+        value
     }
 
     pub(crate) fn create_row_identifier_cell(

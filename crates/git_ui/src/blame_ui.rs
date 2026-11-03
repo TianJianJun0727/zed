@@ -26,6 +26,7 @@ use time::OffsetDateTime;
 use ui::{ContextMenu, CopyButton, Divider, prelude::*, tooltip_container};
 use util::paths::PathStyle;
 use workspace::{Workspace, notifications::NotifyTaskExt as _};
+use zed_i18n::t;
 
 const GIT_BLAME_MAX_AUTHOR_CHARS_DISPLAYED: usize = 20;
 const GIT_BLAME_GUTTER_MARGIN: Rems = rems(0.5);
@@ -502,7 +503,7 @@ impl BlameRenderer for GitBlameRenderer {
                                             .child(Divider::vertical())
                                             .child(
                                                 CopyButton::new("copy-blame-sha", sha.to_string())
-                                                    .tooltip_label("Copy SHA"),
+                                                    .tooltip_label(t!("git_ui.common.copy_sha")),
                                             ),
                                     ),
                             ),
@@ -564,13 +565,13 @@ fn deploy_blame_entry_context_menu(
         let blame_previous_revision = blame_entry.previous_revision_target();
         let has_blame_targets = blame_revision.is_some() || blame_previous_revision.is_some();
         menu.on_blur_subscription(Subscription::new(|| {}))
-            .entry("Copy Commit SHA", None, move |_, cx| {
+            .entry(t!("git_ui.common.copy_commit_sha"), None, move |_, cx| {
                 cx.write_to_clipboard(ClipboardItem::new_string(sha.clone()));
             })
             .when_some(
                 details.and_then(|details| details.permalink.clone()),
                 |this, url| {
-                    this.entry("Open Commit Permalink", None, move |_, cx| {
+                    this.entry(t!("git_ui.blame_ui.open_permalink"), None, move |_, cx| {
                         cx.open_url(url.as_str())
                     })
                 },
@@ -579,30 +580,38 @@ fn deploy_blame_entry_context_menu(
             .when_some(blame_revision, |this, (revision, path)| {
                 let repository = repository.clone();
                 let workspace = workspace.clone();
-                this.entry("Blame Revision", None, move |window, cx| {
-                    open_buffer_blame_at_revision(
-                        repository.clone(),
-                        workspace.clone(),
-                        path.clone(),
-                        revision,
-                        window,
-                        cx,
-                    );
-                })
+                this.entry(
+                    t!("git_ui.blame_ui.blame_revision"),
+                    None,
+                    move |window, cx| {
+                        open_buffer_blame_at_revision(
+                            repository.clone(),
+                            workspace.clone(),
+                            path.clone(),
+                            revision,
+                            window,
+                            cx,
+                        );
+                    },
+                )
             })
             .when_some(blame_previous_revision, |this, (revision, path)| {
                 let repository = repository.clone();
                 let workspace = workspace.clone();
-                this.entry("Blame Previous Revision", None, move |window, cx| {
-                    open_buffer_blame_at_revision(
-                        repository.clone(),
-                        workspace.clone(),
-                        path.clone(),
-                        revision,
-                        window,
-                        cx,
-                    );
-                })
+                this.entry(
+                    t!("git_ui.blame_ui.blame_previous_revision"),
+                    None,
+                    move |window, cx| {
+                        open_buffer_blame_at_revision(
+                            repository.clone(),
+                            workspace.clone(),
+                            path.clone(),
+                            revision,
+                            window,
+                            cx,
+                        );
+                    },
+                )
             })
     });
 
@@ -771,6 +780,6 @@ fn blame_entry_relative_timestamp(blame_entry: &BlameEntry) -> String {
                 time_format::TimestampFormat::Relative,
             )
         }
-        Err(_) => "Error parsing date".to_string(),
+        Err(_) => t!("git_ui.common.error_parsing_date").to_string(),
     }
 }

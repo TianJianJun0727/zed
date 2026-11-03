@@ -73,6 +73,7 @@ workspace.workspace = true
 git_ui_core.workspace = true
 zed_actions.workspace = true
 ztracing.workspace = true
+zed_i18n.workspace = true
 
 [dev-dependencies]
 ctor.workspace = true

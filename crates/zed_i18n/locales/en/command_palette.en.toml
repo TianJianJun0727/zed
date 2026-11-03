@@ -1,0 +1,8 @@
+_version = 1
+
+[command_palette]
+placeholder = "Execute a command..."
+change_keybinding = "Change Keybinding…"
+add_keybinding = "Add Keybinding…"
+run = "Run"
+remove_from_command_history = "Remove from Command History"

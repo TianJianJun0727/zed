@@ -32,6 +32,7 @@ use ui::{
 use util::ResultExt;
 use workspace::{ModalView, Workspace, WorkspaceSettings};
 use zed_actions::{OpenZedUrl, command_palette::Toggle};
+use zed_i18n::t;
 
 actions!(command_palette, [RemoveSelected]);
 
@@ -128,6 +129,7 @@ impl CommandPalette {
                 }
 
                 Some(Command {
+                    display_name: command_display_name(action.name()),
                     name: SharedString::from(humanize_action_name(action.name())),
                     action,
                     usage: None,
@@ -211,6 +213,7 @@ pub struct CommandPaletteDelegate {
 
 struct Command {
     name: SharedString,
+    display_name: SharedString,
     action: Box<dyn Action>,
     usage: Option<CommandUsage>,
 }
@@ -310,6 +313,7 @@ impl Clone for Command {
     fn clone(&self) -> Self {
         Self {
             name: self.name.clone(),
+            display_name: self.display_name.clone(),
             action: self.action.boxed_clone(),
             usage: self.usage,
         }
@@ -365,6 +369,7 @@ impl CommandPaletteDelegate {
             let string = SharedString::from(string);
             commands.push(Command {
                 name: string.clone(),
+                display_name: string.clone(),
                 action,
                 usage: None,
             });
@@ -458,9 +463,9 @@ impl CommandPaletteDelegate {
             })
             .child(
                 ButtonLike::new(("remove-command-history", ix))
-                    .aria_label("Remove from Command History")
+                    .aria_label(t!("command_palette.remove_from_command_history"))
                     .tooltip(Tooltip::for_action_title(
-                        "Remove from Command History",
+                        t!("command_palette.remove_from_command_history"),
                         &RemoveSelected,
                     ))
                     .child(
@@ -521,7 +526,7 @@ impl PickerDelegate for CommandPaletteDelegate {
     }
 
     fn placeholder_text(&self, _window: &mut Window, _cx: &mut App) -> Arc<str> {
-        "Execute a command...".into()
+        t!("command_palette.placeholder").into()
     }
 
     fn select_history(
@@ -612,7 +617,7 @@ impl PickerDelegate for CommandPaletteDelegate {
                 let candidates = commands
                     .iter()
                     .enumerate()
-                    .map(|(ix, command)| StringMatchCandidate::new(ix, &command.name))
+                    .map(|(ix, command)| StringMatchCandidate::new(ix, &command.display_name))
                     .collect::<Vec<_>>();
 
                 let mut matches = fuzzy_nucleo::match_strings_async(
@@ -776,6 +781,14 @@ impl PickerDelegate for CommandPaletteDelegate {
                 .inset(true)
                 .spacing(ListItemSpacing::Sparse)
                 .toggle_state(selected)
+                .when_some(
+                    zed_i18n::action_description(command.action.name()),
+                    |item, description| {
+                        item.tooltip(move |_, cx| {
+                            cx.new(|_| Tooltip::new(description.clone())).into()
+                        })
+                    },
+                )
                 .child(
                     h_flex()
                         .w_full()
@@ -784,7 +797,7 @@ impl PickerDelegate for CommandPaletteDelegate {
                         .gap_2()
                         .child(
                             HighlightedLabel::new(
-                                command.name.clone(),
+                                command.display_name.clone(),
                                 matching_command.positions.clone(),
                             )
                             .truncate(),
@@ -821,7 +834,7 @@ impl PickerDelegate for CommandPaletteDelegate {
 
         let focus_handle = &self.previous_focus_handle;
         let keybinding_buttons = if keybind.has_binding(window) {
-            Button::new("change", "Change Keybinding…")
+            Button::new("change", t!("command_palette.change_keybinding"))
                 .key_binding(
                     KeyBinding::for_action_in(&menu::SecondaryConfirm, focus_handle, cx)
                         .map(|kb| kb.size(rems_from_px(12_f32))),
@@ -830,7 +843,7 @@ impl PickerDelegate for CommandPaletteDelegate {
                     window.dispatch_action(menu::SecondaryConfirm.boxed_clone(), cx);
                 })
         } else {
-            Button::new("add", "Add Keybinding…")
+            Button::new("add", t!("command_palette.add_keybinding"))
                 .key_binding(
                     KeyBinding::for_action_in(&menu::SecondaryConfirm, focus_handle, cx)
                         .map(|kb| kb.size(rems_from_px(12_f32))),
@@ -850,7 +863,7 @@ impl PickerDelegate for CommandPaletteDelegate {
                 .border_color(cx.theme().colors().border_variant)
                 .child(keybinding_buttons)
                 .child(
-                    Button::new("run-action", "Run")
+                    Button::new("run-action", t!("command_palette.run"))
                         .key_binding(
                             KeyBinding::for_action_in(&menu::Confirm, &focus_handle, cx)
                                 .map(|kb| kb.size(rems_from_px(12_f32))),
@@ -862,6 +875,16 @@ impl PickerDelegate for CommandPaletteDelegate {
                 .into_any(),
         )
     }
+}
+
+pub fn command_display_name(action: &str) -> SharedString {
+    let canonical = humanize_action_name(action);
+    if &*zed_i18n::locale() != "en" || zed_i18n::is_pseudo() {
+        if let Some(label) = zed_i18n::action_name(action) {
+            return format!("{label} · {canonical}").into();
+        }
+    }
+    canonical.into()
 }
 
 pub fn humanize_action_name(name: &str) -> String {
@@ -1378,6 +1401,7 @@ mod tests {
                 .enumerate()
                 .map(|(index, (name, action))| Command {
                     name: SharedString::from(name),
+                    display_name: SharedString::from(name),
                     action,
                     usage: (index < 2).then_some(CommandUsage {
                         last_invoked: 0,

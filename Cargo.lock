@@ -199,6 +199,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -1408,6 +1409,7 @@ dependencies = [
  "util",
  "which",
  "workspace",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -1447,6 +1449,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -2097,6 +2100,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349a06037c7bf932dd7e7d1f653678b2038b9ad46a74102f1fc7bd7872678cce"
 
 [[package]]
+name = "base62"
+version = "2.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3a647dce9631f152a99ec16cfc09267ae55fe280d5dc288964027d458076323"
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2694,6 +2703,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -3492,6 +3502,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -4785,6 +4796,7 @@ dependencies = [
  "smol",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -4840,6 +4852,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -4976,6 +4989,7 @@ dependencies = [
  "workspace",
  "worktree",
  "yaml-rust2",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -5008,6 +5022,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -5611,6 +5626,7 @@ dependencies = [
  "vim_mode_setting",
  "workspace",
  "zed_actions",
+ "zed_i18n",
  "zlog",
  "ztracing",
 ]
@@ -5747,6 +5763,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -6245,6 +6262,7 @@ dependencies = [
  "vim_mode_setting",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -6355,6 +6373,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -6407,6 +6426,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -7211,6 +7231,7 @@ dependencies = [
  "watch",
  "workspace",
  "zed_actions",
+ "zed_i18n",
  "zlog",
  "ztracing",
 ]
@@ -7253,6 +7274,7 @@ dependencies = [
  "watch",
  "workspace",
  "zed_actions",
+ "zed_i18n",
  "zeroize",
  "zlog",
  "ztracing",
@@ -7333,6 +7355,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "globwalk"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e3af942408868f6934a7b85134a3230832b9977cf66125df2f9edcfce4ddcc"
+dependencies = [
+ "bitflags 1.3.2",
+ "ignore",
+ "walkdir",
+]
+
+[[package]]
 name = "gloo-timers"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7384,6 +7417,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -8761,6 +8795,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -8931,6 +8966,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -9082,6 +9118,15 @@ name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
 dependencies = [
  "either",
 ]
@@ -9438,6 +9483,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -9764,6 +9810,7 @@ dependencies = [
  "project",
  "ui",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -9784,6 +9831,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -9818,6 +9866,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -10049,6 +10098,7 @@ dependencies = [
  "project",
  "ui",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -10480,6 +10530,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -10690,6 +10741,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -11093,6 +11145,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -11443,6 +11496,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -12210,6 +12264,7 @@ dependencies = [
  "vim_mode_setting",
  "workspace",
  "zed_actions",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -12314,6 +12369,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -12520,6 +12576,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -12556,6 +12613,7 @@ dependencies = [
  "workspace",
  "worktree",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -13498,6 +13556,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -13622,6 +13681,7 @@ dependencies = [
  "windows 0.62.2",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -14132,6 +14192,7 @@ dependencies = [
  "workspace",
  "worktree",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -14157,6 +14218,7 @@ dependencies = [
  "theme_settings",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -14923,6 +14985,7 @@ dependencies = [
  "workspace",
  "worktree",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -15109,6 +15172,7 @@ dependencies = [
  "ui",
  "ui_input",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -15246,6 +15310,7 @@ dependencies = [
  "uuid",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -15614,6 +15679,60 @@ dependencies = [
  "globset",
  "sha2",
  "walkdir",
+]
+
+[[package]]
+name = "rust-i18n"
+version = "3.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fda2551fdfaf6cc5ee283adc15e157047b92ae6535cf80f6d4962d05717dc332"
+dependencies = [
+ "globwalk",
+ "once_cell",
+ "regex",
+ "rust-i18n-macro",
+ "rust-i18n-support",
+ "smallvec",
+]
+
+[[package]]
+name = "rust-i18n-macro"
+version = "3.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22baf7d7f56656d23ebe24f6bb57a5d40d2bce2a5f1c503e692b5b2fa450f965"
+dependencies = [
+ "glob",
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "rust-i18n-support",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "rust-i18n-support"
+version = "3.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "940ed4f52bba4c0152056d771e563b7133ad9607d4384af016a134b58d758f19"
+dependencies = [
+ "arc-swap",
+ "base62",
+ "globwalk",
+ "itertools 0.11.0",
+ "lazy_static",
+ "normpath",
+ "once_cell",
+ "proc-macro2",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "siphasher 1.0.1",
+ "toml 0.8.23",
+ "triomphe",
 ]
 
 [[package]]
@@ -16144,6 +16263,7 @@ dependencies = [
  "util_macros",
  "workspace",
  "zed_actions",
+ "zed_i18n",
  "ztracing",
 ]
 
@@ -16488,6 +16608,7 @@ dependencies = [
  "smallvec",
  "unindent",
  "util",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -16552,6 +16673,7 @@ dependencies = [
  "ui",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -16617,6 +16739,7 @@ dependencies = [
  "workspace",
  "zed_actions",
  "zed_credentials_provider",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -16759,6 +16882,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -17028,6 +17152,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -17643,6 +17768,7 @@ dependencies = [
  "ui",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -17930,6 +18056,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -17953,6 +18080,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -18050,6 +18178,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -18195,6 +18324,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -18292,6 +18422,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -18542,6 +18673,7 @@ dependencies = [
  "util",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -18787,6 +18919,7 @@ dependencies = [
  "ui",
  "util",
  "workspace",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -19239,6 +19372,7 @@ version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd69c5aa8f924c7519d6372789a74eac5b94fb0f8fcf0d4a97eb0bfc3e785f39"
 dependencies = [
+ "arc-swap",
  "serde",
  "stable_deref_trait",
 ]
@@ -19357,6 +19491,7 @@ dependencies = [
  "theme_settings",
  "ui_macros",
  "web-time",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -19366,6 +19501,7 @@ dependencies = [
  "component",
  "gpui",
  "ui",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -19794,6 +19930,7 @@ dependencies = [
  "vim_mode_setting",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -20880,6 +21017,7 @@ dependencies = [
  "vim_mode_setting",
  "workspace",
  "zed_actions",
+ "zed_i18n",
 ]
 
 [[package]]
@@ -22097,6 +22235,7 @@ dependencies = [
  "util",
  "uuid",
  "zed_actions",
+ "zed_i18n",
  "zlog",
 ]
 
@@ -22728,6 +22867,7 @@ dependencies = [
  "zed_actions",
  "zed_credentials_provider",
  "zed_env_vars",
+ "zed_i18n",
  "zlog",
  "zlog_settings",
  "ztracing",
@@ -22913,6 +23053,15 @@ name = "zed_html"
 version = "0.3.2"
 dependencies = [
  "zed_extension_api 0.7.0",
+]
+
+[[package]]
+name = "zed_i18n"
+version = "0.1.0"
+dependencies = [
+ "rust-i18n",
+ "sys-locale",
+ "toml 0.9.8",
 ]
 
 [[package]]

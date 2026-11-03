@@ -10,6 +10,7 @@ use crate::{
     debugger_panel::DebugPanel,
     session::{DebugSession, running::RunningState},
 };
+use zed_i18n::t;
 
 struct SessionListEntry {
     ancestors: Vec<Entity<DebugSession>>,
@@ -23,15 +24,16 @@ impl SessionListEntry {
         let mut label = String::new();
         for ancestor in &self.ancestors {
             label.push_str(&ancestor.update(cx, |ancestor, cx| {
-                ancestor.label(cx).unwrap_or("(child)".into())
+                ancestor
+                    .label(cx)
+                    .unwrap_or_else(|| t!("debugger_ui.session.child_label").into())
             }));
             label.push_str(" » ");
         }
-        label.push_str(
-            &self
-                .leaf
-                .update(cx, |leaf, cx| leaf.label(cx).unwrap_or("(child)".into())),
-        );
+        label.push_str(&self.leaf.update(cx, |leaf, cx| {
+            leaf.label(cx)
+                .unwrap_or_else(|| t!("debugger_ui.session.child_label").into())
+        }));
         let label = truncate_and_trailoff(&label, MAX_LABEL_CHARS);
 
         let is_terminated = self
@@ -118,10 +120,12 @@ impl DebugPanel {
         let weak = cx.weak_entity();
         let trigger_label = if let Some(active_session) = active_session.clone() {
             active_session.update(cx, |active_session, cx| {
-                active_session.label(cx).unwrap_or("(child)".into())
+                active_session
+                    .label(cx)
+                    .unwrap_or_else(|| t!("debugger_ui.session.child_label").into())
             })
         } else {
-            SharedString::new_static("Unknown Session")
+            t!("debugger_ui.session.unknown").into()
         };
         let running_state = running_state.read(cx);
 
@@ -212,7 +216,9 @@ impl DebugPanel {
         )
         .attach(Anchor::BottomLeft)
         .handle(self.session_picker_menu_handle.clone())
-        .trigger_tooltip(Tooltip::text("Select a Debug Session"));
+        .trigger_tooltip(Tooltip::text(t!(
+            "debugger_ui.session.select_session_tooltip"
+        )));
 
         Some(menu)
     }
@@ -292,7 +298,7 @@ impl DebugPanel {
                 thread
                     .name
                     .is_empty()
-                    .then(|| format!("Tid: {}", thread.id))
+                    .then(|| t!("debugger_ui.session.thread_id", id = thread.id))
                     .unwrap_or_else(|| thread.name.clone())
             });
 
@@ -309,7 +315,7 @@ impl DebugPanel {
                             let entry_name = thread
                                 .name
                                 .is_empty()
-                                .then(|| format!("Tid: {}", thread.id))
+                                .then(|| t!("debugger_ui.session.thread_id", id = thread.id))
                                 .unwrap_or_else(|| thread.name);
                             let entry_name = truncate_and_trailoff(&entry_name, MAX_LABEL_CHARS);
 

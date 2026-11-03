@@ -247,6 +247,7 @@ members = [
     "crates/zed_actions",
     "crates/zed_credentials_provider",
     "crates/zed_env_vars",
+    "crates/zed_i18n",
     "crates/zeta_prompt",
     "crates/zlog",
     "crates/zlog_settings",
@@ -516,6 +517,7 @@ x_ai_subscribed = { path = "crates/x_ai_subscribed" }
 zed_actions = { path = "crates/zed_actions" }
 zed_credentials_provider = { path = "crates/zed_credentials_provider" }
 zed_env_vars = { path = "crates/zed_env_vars" }
+zed_i18n = { path = "crates/zed_i18n" }
 zeta_prompt = { path = "crates/zeta_prompt" }
 zlog = { path = "crates/zlog" }
 zlog_settings = { path = "crates/zlog_settings" }
@@ -868,6 +870,7 @@ rsa = { version = "0.9", default-features = false, features = ["std", "u64_digit
 runtimelib = { version = "1.4.0", default-features = false, features = [
     "async-dispatcher-runtime", "aws-lc-rs"
 ] }
+rust-i18n = "3.1"
 rust-embed = { version = "8.11", features = ["include-exclude", "compression"] }
 rustc-hash = "2.1.0"
 rustix = { version = "1.1", features = ["fs"] }

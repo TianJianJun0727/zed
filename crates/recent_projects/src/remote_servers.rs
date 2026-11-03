@@ -53,6 +53,7 @@ use workspace::{
     notifications::{DetachAndPromptErr, NotificationId},
     open_remote_project_with_existing_connection,
 };
+use zed_i18n::t;
 
 pub struct RemoteServerProjects {
     mode: Mode,
@@ -223,7 +224,7 @@ impl PickerDelegate for DevContainerPickerDelegate {
     }
 
     fn placeholder_text(&self, _window: &mut Window, _cx: &mut App) -> Arc<str> {
-        "Select Dev Container Configuration".into()
+        t!("recent_projects.remote.select_dev_container_config").into()
     }
 
     fn update_matches(
@@ -327,24 +328,30 @@ impl PickerDelegate for DevContainerPickerDelegate {
                 .border_t_1()
                 .border_color(cx.theme().colors().border_variant)
                 .child(
-                    Button::new("run-action", "Start Dev Container")
-                        .key_binding(
-                            KeyBinding::for_action(&menu::Confirm, cx)
-                                .map(|kb| kb.size(rems_from_px(12_f32))),
-                        )
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(menu::Confirm.boxed_clone(), cx)
-                        }),
+                    Button::new(
+                        "run-action",
+                        t!("recent_projects.remote.start_dev_container"),
+                    )
+                    .key_binding(
+                        KeyBinding::for_action(&menu::Confirm, cx)
+                            .map(|kb| kb.size(rems_from_px(12_f32))),
+                    )
+                    .on_click(|_, window, cx| {
+                        window.dispatch_action(menu::Confirm.boxed_clone(), cx)
+                    }),
                 )
                 .child(
-                    Button::new("run-action-secondary", "Open devcontainer.json")
-                        .key_binding(
-                            KeyBinding::for_action(&menu::SecondaryConfirm, cx)
-                                .map(|kb| kb.size(rems_from_px(12_f32))),
-                        )
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(menu::SecondaryConfirm.boxed_clone(), cx)
-                        }),
+                    Button::new(
+                        "run-action-secondary",
+                        t!("recent_projects.remote.open_devcontainer_json"),
+                    )
+                    .key_binding(
+                        KeyBinding::for_action(&menu::SecondaryConfirm, cx)
+                            .map(|kb| kb.size(rems_from_px(12_f32))),
+                    )
+                    .on_click(|_, window, cx| {
+                        window.dispatch_action(menu::SecondaryConfirm.boxed_clone(), cx)
+                    }),
                 )
                 .into_any_element(),
         )
@@ -363,7 +370,11 @@ impl EditNicknameState {
             .and_then(|state| state.nickname)
             .filter(|text| !text.is_empty());
         this.editor.update(cx, |this, cx| {
-            this.set_placeholder_text("Add a nickname for this server", window, cx);
+            this.set_placeholder_text(
+                &t!("recent_projects.remote.nickname_placeholder"),
+                window,
+                cx,
+            );
             if let Some(starting_text) = starting_text {
                 this.set_text(starting_text, window, cx);
             }
@@ -506,10 +517,9 @@ impl ProjectPicker {
                         connection, project, paths, app_state, window, None, None, cx,
                     )
                     .await
-                    .log_err()
-                    .map(|(_workspace, items)| items);
+                    .log_err();
 
-                    if let Some(items) = items {
+                    if let Some((_workspace, items)) = items {
                         for (item, path) in items.into_iter().zip(paths_with_positions) {
                             let Some(item) = item else {
                                 continue;
@@ -1048,7 +1058,7 @@ impl RemoteServerPickerDelegate {
         &self,
         ix: usize,
         icon: IconName,
-        label: &'static str,
+        label: impl Into<SharedString>,
         selected: bool,
     ) -> AnyElement {
         ListItem::new(("remote-action", ix))
@@ -1094,11 +1104,11 @@ impl PickerDelegate for RemoteServerPickerDelegate {
     }
 
     fn placeholder_text(&self, _window: &mut Window, _cx: &mut App) -> Arc<str> {
-        "Search remote projects…".into()
+        t!("recent_projects.remote.search_remote_projects").into()
     }
 
     fn no_matches_text(&self, _window: &mut Window, _cx: &mut App) -> Option<SharedString> {
-        Some("No matching remote projects.".into())
+        Some(t!("recent_projects.remote.no_matching_remote_projects").into())
     }
 
     fn update_matches(
@@ -1263,22 +1273,34 @@ impl PickerDelegate for RemoteServerPickerDelegate {
                 server,
                 host_positions,
             } => self.render_server_header(*server, host_positions),
-            RemoteMatch::AddServer => {
-                Some(self.render_action_item(ix, IconName::Plus, "Connect SSH Server", selected))
-            }
-            RemoteMatch::AddDevContainer => {
-                Some(self.render_action_item(ix, IconName::Plus, "Connect Dev Container", selected))
-            }
-            RemoteMatch::AddWsl => {
-                Some(self.render_action_item(ix, IconName::Plus, "Add WSL Distro", selected))
-            }
-            RemoteMatch::OpenFolder { .. } => {
-                Some(self.render_action_item(ix, IconName::Plus, "Open Folder", selected))
-            }
+            RemoteMatch::AddServer => Some(self.render_action_item(
+                ix,
+                IconName::Plus,
+                t!("recent_projects.remote.connect_ssh_server"),
+                selected,
+            )),
+            RemoteMatch::AddDevContainer => Some(self.render_action_item(
+                ix,
+                IconName::Plus,
+                t!("recent_projects.remote.connect_dev_container"),
+                selected,
+            )),
+            RemoteMatch::AddWsl => Some(self.render_action_item(
+                ix,
+                IconName::Plus,
+                t!("recent_projects.remote.add_wsl_distro"),
+                selected,
+            )),
+            RemoteMatch::OpenFolder { .. } => Some(self.render_action_item(
+                ix,
+                IconName::Plus,
+                t!("recent_projects.remote.open_folder"),
+                selected,
+            )),
             RemoteMatch::ViewServerOptions { .. } => Some(self.render_action_item(
                 ix,
                 IconName::Settings,
-                "View Server Options",
+                t!("recent_projects.remote.view_server_options"),
                 selected,
             )),
             RemoteMatch::Project {
@@ -1320,7 +1342,9 @@ impl PickerDelegate for RemoteServerPickerDelegate {
                                     .icon_size(IconSize::Small)
                                     .shape(IconButtonShape::Square)
                                     .size(ButtonSize::Large)
-                                    .tooltip(Tooltip::text("Delete Remote Project"))
+                                    .tooltip(Tooltip::text(t!(
+                                        "recent_projects.remote.delete_remote_project"
+                                    )))
                                     .on_click(cx.listener(move |_, _, _, cx| {
                                         let remote_project = remote_project.clone();
                                         remote_server_projects
@@ -1362,16 +1386,16 @@ impl PickerDelegate for RemoteServerPickerDelegate {
             h_flex()
                 .gap_1()
                 .child(
-                    Button::new("open_new_window", "New Window")
+                    Button::new("open_new_window", t!("recent_projects.new_window"))
                         .key_binding(KeyBinding::for_action(&menu::SecondaryConfirm, cx))
                         .on_click(|_, window, cx| {
                             window.dispatch_action(menu::SecondaryConfirm.boxed_clone(), cx)
                         }),
                 )
-                .child(confirm_button("Open".into()))
+                .child(confirm_button(t!("recent_projects.open").into()))
                 .into_any_element()
         } else {
-            confirm_button("Select".into()).into_any_element()
+            confirm_button(t!("recent_projects.remote.select").into()).into_any_element()
         };
 
         Some(
@@ -1592,7 +1616,13 @@ impl RemoteServerProjects {
             Err(e) => {
                 self.mode = Mode::CreateRemoteServer(CreateRemoteServer {
                     address_editor: editor,
-                    address_error: Some(format!("could not parse: {:?}", e).into()),
+                    address_error: Some(
+                        t!(
+                            "recent_projects.remote.could_not_parse",
+                            error = format!("{:?}", e)
+                        )
+                        .into(),
+                    ),
                     ssh_prompt: None,
                     _creating: None,
                 });
@@ -1617,7 +1647,12 @@ impl RemoteServerProjects {
             window,
             cx,
         )
-        .prompt_err("Failed to connect", window, cx, |_, _, _| None);
+        .prompt_err(
+            &t!("recent_projects.remote.failed_to_connect"),
+            window,
+            cx,
+            |_, _, _| None,
+        );
 
         let address_editor = editor.clone();
         let creating = cx.spawn_in(window, async move |this, cx| {
@@ -1692,7 +1727,12 @@ impl RemoteServerProjects {
             window,
             cx,
         )
-        .prompt_err("Failed to connect", window, cx, |_, _, _| None);
+        .prompt_err(
+            &t!("recent_projects.remote.failed_to_connect"),
+            window,
+            cx,
+            |_, _, _| None,
+        );
 
         let wsl_picker = picker.clone();
         let creating = cx.spawn_in(window, async move |this, cx| {
@@ -1806,7 +1846,12 @@ impl RemoteServerProjects {
                     window,
                     cx,
                 )
-                .prompt_err("Failed to connect", window, cx, |_, _, _| None);
+                .prompt_err(
+                    &t!("recent_projects.remote.failed_to_connect"),
+                    window,
+                    cx,
+                    |_, _, _| None,
+                );
 
                 cx.spawn_in(window, async move |workspace, cx| {
                     let session = connect.await;
@@ -2020,9 +2065,10 @@ impl RemoteServerProjects {
             .await;
             if let Err(e) = result {
                 log::error!("Failed to connect: {e:#}");
+                let title = t!("recent_projects.remote.failed_to_connect");
                 cx.prompt(
                     gpui::PromptLevel::Critical,
-                    "Failed to connect",
+                    &title,
                     Some(&e.to_string()),
                     &["OK"],
                 )
@@ -2253,9 +2299,10 @@ impl RemoteServerProjects {
                     Ok((c, s)) => (c, s),
                     Err(e) => {
                         log::error!("Failed to start dev container: {:?}", e);
+                        let title = t!("recent_projects.remote.failed_to_start_dev_container");
                         cx.prompt(
                             gpui::PromptLevel::Critical,
-                            "Failed to start Dev Container. See logs for details",
+                            &title,
                             Some(&format!("{e}")),
                             &["OK"],
                         )
@@ -2308,9 +2355,10 @@ impl RemoteServerProjects {
             .await;
             if let Err(e) = result {
                 log::error!("Failed to connect: {e:#}");
+                let title = t!("recent_projects.remote.failed_to_connect");
                 cx.prompt(
                     gpui::PromptLevel::Critical,
-                    "Failed to connect",
+                    &title,
                     Some(&e.to_string()),
                     &["OK"],
                 )
@@ -2341,7 +2389,9 @@ impl RemoteServerProjects {
                                         .start_slot(
                                             Icon::new(IconName::XCircle).color(Color::Error),
                                         )
-                                        .child(Label::new("Error Creating Dev Container:"))
+                                        .child(Label::new(t!(
+                                            "recent_projects.remote.error_creating_dev_container"
+                                        )))
                                         .child(Label::new(message).buffer_font(cx)),
                                 ),
                             ),
@@ -2371,7 +2421,9 @@ impl RemoteServerProjects {
                                                 .color(Color::Muted)
                                                 .size(IconSize::Small),
                                         )
-                                        .child(Label::new("Open Zed Log"))
+                                        .child(Label::new(t!(
+                                            "recent_projects.remote.open_zed_log"
+                                        )))
                                         .on_click(cx.listener(|_, _, window, cx| {
                                             window.dispatch_action(Box::new(OpenLog), cx);
                                             cx.emit(DismissEvent);
@@ -2402,7 +2454,7 @@ impl RemoteServerProjects {
                                                 .color(Color::Muted)
                                                 .size(IconSize::Small),
                                         )
-                                        .child(Label::new("Exit"))
+                                        .child(Label::new(t!("recent_projects.remote.exit")))
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.cancel(&menu::Cancel, window, cx);
                                             cx.notify();
@@ -2428,7 +2480,8 @@ impl RemoteServerProjects {
                             .pb_1()
                             .child(
                                 ModalHeader::new().child(
-                                    Headline::new("Dev Containers").size(HeadlineSize::XSmall),
+                                    Headline::new(t!("recent_projects.remote.dev_containers"))
+                                        .size(HeadlineSize::XSmall),
                                 ),
                             )
                             .child(ListSeparator)
@@ -2446,7 +2499,9 @@ impl RemoteServerProjects {
                                         h_flex()
                                             .opacity(0.6)
                                             .gap_1()
-                                            .child(Label::new("Creating Dev Container"))
+                                            .child(Label::new(t!(
+                                                "recent_projects.remote.creating_dev_container"
+                                            )))
                                             .child(LoadingLabel::new("")),
                                     ),
                             ),
@@ -2524,24 +2579,27 @@ impl RemoteServerProjects {
                                     .w_full()
                                     .gap_1()
                                     .child(
-                                        Label::new(
-                                            "Enter the command you use to SSH into this server.",
-                                        )
-                                        .color(Color::Muted)
-                                        .size(LabelSize::Small),
+                                        Label::new(t!("recent_projects.remote.ssh_command_hint"))
+                                            .color(Color::Muted)
+                                            .size(LabelSize::Small),
                                     )
                                     .child(
-                                        Button::new("learn-more", "Learn More")
-                                            .label_size(LabelSize::Small)
-                                            .end_icon(
-                                                Icon::new(IconName::ArrowUpRight)
-                                                    .size(IconSize::XSmall),
-                                            )
-                                            .on_click(|_, _, cx| {
+                                        Button::new(
+                                            "learn-more",
+                                            t!("recent_projects.remote.learn_more"),
+                                        )
+                                        .label_size(LabelSize::Small)
+                                        .end_icon(
+                                            Icon::new(IconName::ArrowUpRight)
+                                                .size(IconSize::XSmall),
+                                        )
+                                        .on_click(
+                                            |_, _, cx| {
                                                 cx.open_url(
                                                     "https://zed.dev/docs/remote-development",
                                                 );
-                                            }),
+                                            },
+                                        ),
                                     ),
                             )
                         }
@@ -2656,7 +2714,7 @@ impl RemoteServerProjects {
                                         .start_slot(
                                             Icon::new(IconName::ArrowLeft).color(Color::Muted),
                                         )
-                                        .child(Label::new("Go Back"))
+                                        .child(Label::new(t!("recent_projects.remote.go_back")))
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.mode =
                                                 Mode::default_mode(&this.ssh_config_servers, cx);
@@ -2694,13 +2752,18 @@ impl RemoteServerProjects {
                 window: &mut Window,
                 cx: &mut App,
             ) {
-                let prompt_message = format!("Remove WSL distro `{}`?", distro_name);
+                let prompt_message = t!(
+                    "recent_projects.remote.remove_distro_prompt",
+                    name = distro_name
+                );
 
+                let yes = t!("recent_projects.remote.prompt_yes_remove");
+                let no = t!("recent_projects.remote.prompt_no_keep");
                 let confirmation = window.prompt(
                     PromptLevel::Warning,
                     &prompt_message,
                     None,
-                    &["Yes, remove it", "No, keep it"],
+                    &[&*yes, &*no],
                     cx,
                 );
 
@@ -2733,7 +2796,10 @@ impl RemoteServerProjects {
                         .inset(true)
                         .spacing(ui::ListItemSpacing::Sparse)
                         .start_slot(Icon::new(IconName::Trash).color(Color::Error))
-                        .child(Label::new("Remove Distro").color(Color::Error))
+                        .child(
+                            Label::new(t!("recent_projects.remote.remove_distro"))
+                                .color(Color::Error),
+                        )
                         .on_click(cx.listener(move |_, _, window, cx| {
                             remove_wsl_distro(cx.entity(), index, distro_name.clone(), window, cx);
                         })),
@@ -2754,9 +2820,9 @@ impl RemoteServerProjects {
         v_flex()
             .child({
                 let label = if connection.nickname.is_some() {
-                    "Edit Nickname"
+                    t!("recent_projects.remote.edit_nickname")
                 } else {
-                    "Add Nickname to Server"
+                    t!("recent_projects.remote.add_nickname")
                 };
                 div()
                     .id("ssh-options-add-nickname")
@@ -2790,9 +2856,9 @@ impl RemoteServerProjects {
                     workspace
                         .update(cx, |this, cx| {
                             struct SshServerAddressCopiedToClipboard;
-                            let notification = format!(
-                                "Copied server address ({}) to clipboard",
-                                connection_string
+                            let notification = t!(
+                                "recent_projects.remote.copied_server_address",
+                                address = connection_string
                             );
 
                             this.show_toast(
@@ -2824,7 +2890,7 @@ impl RemoteServerProjects {
                             .inset(true)
                             .spacing(ui::ListItemSpacing::Sparse)
                             .start_slot(Icon::new(IconName::Copy).color(Color::Muted))
-                            .child(Label::new("Copy Server Address"))
+                            .child(Label::new(t!("recent_projects.remote.copy_server_address")))
                             .end_slot(Label::new(connection_string.clone()).color(Color::Muted))
                             .show_end_slot_on_hover()
                             .on_click({
@@ -2843,13 +2909,18 @@ impl RemoteServerProjects {
                     window: &mut Window,
                     cx: &mut App,
                 ) {
-                    let prompt_message = format!("Remove server `{}`?", connection_string);
+                    let prompt_message = t!(
+                        "recent_projects.remote.remove_server_prompt",
+                        address = connection_string
+                    );
 
+                    let yes = t!("recent_projects.remote.prompt_yes_remove");
+                    let no = t!("recent_projects.remote.prompt_no_keep");
                     let confirmation = window.prompt(
                         PromptLevel::Warning,
                         &prompt_message,
                         None,
-                        &["Yes, remove it", "No, keep it"],
+                        &[&*yes, &*no],
                         cx,
                     );
 
@@ -2888,7 +2959,10 @@ impl RemoteServerProjects {
                             .inset(true)
                             .spacing(ui::ListItemSpacing::Sparse)
                             .start_slot(Icon::new(IconName::Trash).color(Color::Error))
-                            .child(Label::new("Remove Server").color(Color::Error))
+                            .child(
+                                Label::new(t!("recent_projects.remote.remove_server"))
+                                    .color(Color::Error),
+                            )
                             .on_click(cx.listener(move |_, _, window, cx| {
                                 remove_ssh_server(
                                     cx.entity(),

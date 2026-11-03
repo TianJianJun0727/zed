@@ -29,6 +29,7 @@ use workspace::{
     open_new, register_serializable_item, with_active_or_new_workspace,
 };
 use zed_actions::OpenOnboarding;
+use zed_i18n::t;
 
 mod base_keymap_picker;
 mod basics_page;
@@ -351,30 +352,39 @@ impl Render for Onboarding {
                                             .child(
                                                 v_flex()
                                                     .child(
-                                                        Headline::new("Welcome to Zed")
-                                                            .size(HeadlineSize::Small),
+                                                        Headline::new(t!(
+                                                            "onboarding.onboarding.welcome_to_zed"
+                                                        ))
+                                                        .size(HeadlineSize::Small),
                                                     )
                                                     .child(
-                                                        Label::new("The editor for what's next")
-                                                            .color(Color::Muted)
-                                                            .size(LabelSize::Small)
-                                                            .italic(),
+                                                        Label::new(t!(
+                                                            "onboarding.onboarding.tagline"
+                                                        ))
+                                                        .color(Color::Muted)
+                                                        .size(LabelSize::Small)
+                                                        .italic(),
                                                     ),
                                             ),
                                     )
                                     .child({
-                                        Button::new("finish_setup", "Finish Setup")
-                                            .style(ButtonStyle::Filled)
-                                            .size(ButtonSize::Medium)
-                                            .width(rems_from_px(200_f32))
-                                            .key_binding(KeyBinding::for_action_in(
-                                                &Finish,
-                                                &self.focus_handle,
-                                                cx,
-                                            ))
-                                            .on_click(|_, window, cx| {
+                                        Button::new(
+                                            "finish_setup",
+                                            t!("onboarding.onboarding.finish_setup"),
+                                        )
+                                        .style(ButtonStyle::Filled)
+                                        .size(ButtonSize::Medium)
+                                        .width(rems_from_px(200_f32))
+                                        .key_binding(KeyBinding::for_action_in(
+                                            &Finish,
+                                            &self.focus_handle,
+                                            cx,
+                                        ))
+                                        .on_click(
+                                            |_, window, cx| {
                                                 window.dispatch_action(Finish.boxed_clone(), cx);
-                                            })
+                                            },
+                                        )
                                     }),
                             )
                             .child(Divider::horizontal().color(ui::DividerColor::BorderVariant))
@@ -397,7 +407,7 @@ impl Item for Onboarding {
     type Event = ItemEvent;
 
     fn tab_content_text(&self, _detail: usize, _cx: &App) -> SharedString {
-        "Onboarding".into()
+        t!("onboarding.onboarding.tab_title").into()
     }
 
     fn telemetry_event_text(&self) -> Option<&'static str> {
@@ -484,7 +494,7 @@ pub async fn handle_import_vscode_settings(
                 zlog::error!("{err:?}");
                 let _ = cx.prompt(
                     gpui::PromptLevel::Info,
-                    &format!("Could not find or load a {source} settings file"),
+                    &t!("onboarding.onboarding.import_not_found", source = source),
                     None,
                     &["OK"],
                 );
@@ -495,14 +505,16 @@ pub async fn handle_import_vscode_settings(
     if !skip_prompt {
         let prompt = cx.prompt(
             gpui::PromptLevel::Warning,
-            &format!(
-                "Importing {} settings may overwrite your existing settings. \
-                Will import settings from {}",
-                vscode_settings.source,
-                truncate_and_remove_front(&vscode_settings.path.to_string_lossy(), 128),
+            &t!(
+                "onboarding.onboarding.import_warning",
+                source = vscode_settings.source,
+                path = truncate_and_remove_front(&vscode_settings.path.to_string_lossy(), 128),
             ),
             None,
-            &["Import", "Cancel"],
+            &[
+                gpui::PromptButton::new(t!("onboarding.onboarding.import")),
+                gpui::PromptButton::new(t!("onboarding.onboarding.cancel")),
+            ],
         );
         let result = cx.spawn(async move |_| prompt.await.ok()).await;
         if result != Some(0) {
@@ -527,7 +539,7 @@ pub async fn handle_import_vscode_settings(
         .update_in(cx, |workspace, _, cx| match result {
             Ok(_) => {
                 let confirmation_toast = StatusToast::new(
-                    format!("Your {} settings were successfully imported.", source),
+                    t!("onboarding.onboarding.import_success", source = source),
                     cx,
                     |this, _| {
                         this.icon(
@@ -549,21 +561,18 @@ pub async fn handle_import_vscode_settings(
                 workspace.toggle_status_toast(confirmation_toast, cx);
             }
             Err(_) => {
-                let error_toast = StatusToast::new(
-                    "Failed to import settings. See log for details",
-                    cx,
-                    |this, _| {
+                let error_toast =
+                    StatusToast::new(t!("onboarding.onboarding.import_failed"), cx, |this, _| {
                         this.icon(
                             Icon::new(IconName::Close)
                                 .size(IconSize::Small)
                                 .color(Color::Error),
                         )
-                        .action("Open Log", |window, cx| {
+                        .action(t!("onboarding.onboarding.open_log"), |window, cx| {
                             window.dispatch_action(workspace::OpenLog.boxed_clone(), cx)
                         })
                         .dismiss_button(true)
-                    },
-                );
+                    });
                 workspace.toggle_status_toast(error_toast, cx);
             }
         })

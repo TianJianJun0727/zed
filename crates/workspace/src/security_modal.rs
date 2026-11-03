@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use zed_i18n::t;
 
 use collections::{HashMap, HashSet};
 use gpui::{
@@ -110,10 +111,12 @@ impl Render for SecurityModal {
             .on_action(cx.listener(|this, _: &menu::Confirm, _window, cx| {
                 this.trust_and_dismiss(cx);
             }))
-            .on_action(cx.listener(|security_modal, _: &ToggleWorktreeSecurity, _window, cx| {
-                security_modal.trusted = Some(false);
-                security_modal.dismiss(cx);
-            }))
+            .on_action(
+                cx.listener(|security_modal, _: &ToggleWorktreeSecurity, _window, cx| {
+                    security_modal.trusted = Some(false);
+                    security_modal.dismiss(cx);
+                }),
+            )
             .header(
                 v_flex()
                     .p_3()
@@ -138,49 +141,41 @@ impl Render for SecurityModal {
                                     .max_h_24()
                                     .overflow_y_scroll()
                                     .track_scroll(&self.project_list_scroll_handle)
-                                    .children(
-                                        self.restricted_paths.values().filter_map(
-                                            |restricted_path| {
-                                                let abs_path = if restricted_path.is_file {
-                                                    path_style.parent(&restricted_path.abs_path)
-                                                } else {
-                                                    Some(restricted_path.abs_path.as_ref())
-                                                }?;
-                                                let label = match &restricted_path.host {
-                                                    Some(remote_host) => {
-                                                        match &remote_host.user_name {
-                                                            Some(user_name) => format!(
-                                                                "{} ({}@{})",
-                                                                self.shorten_path(abs_path, path_style)
-                                                                    .display(),
-                                                                user_name,
-                                                                remote_host.host_identifier
-                                                            ),
-                                                            None => format!(
-                                                                "{} ({})",
-                                                                self.shorten_path(abs_path, path_style)
-                                                                    .display(),
-                                                                remote_host.host_identifier
-                                                            ),
-                                                        }
-                                                    }
-                                                    None => self
-                                                        .shorten_path(abs_path, path_style)
-                                                        .display()
-                                                        .to_string(),
-                                                };
-                                                Some(
-                                                    h_flex()
-                                                        .pl(
-                                                            IconSize::default().rems() + rems(0.5),
-                                                        )
-                                                        .child(
-                                                            Label::new(label).color(Color::Muted),
-                                                        ),
-                                                )
-                                            },
-                                        ),
-                                    ),
+                                    .children(self.restricted_paths.values().filter_map(
+                                        |restricted_path| {
+                                            let abs_path = if restricted_path.is_file {
+                                                path_style.parent(&restricted_path.abs_path)
+                                            } else {
+                                                Some(restricted_path.abs_path.as_ref())
+                                            }?;
+                                            let label = match &restricted_path.host {
+                                                Some(remote_host) => match &remote_host.user_name {
+                                                    Some(user_name) => format!(
+                                                        "{} ({}@{})",
+                                                        self.shorten_path(abs_path, path_style)
+                                                            .display(),
+                                                        user_name,
+                                                        remote_host.host_identifier
+                                                    ),
+                                                    None => format!(
+                                                        "{} ({})",
+                                                        self.shorten_path(abs_path, path_style)
+                                                            .display(),
+                                                        remote_host.host_identifier
+                                                    ),
+                                                },
+                                                None => self
+                                                    .shorten_path(abs_path, path_style)
+                                                    .display()
+                                                    .to_string(),
+                                            };
+                                            Some(
+                                                h_flex()
+                                                    .pl(IconSize::default().rems() + rems(0.5))
+                                                    .child(Label::new(label).color(Color::Muted)),
+                                            )
+                                        },
+                                    )),
                             ),
                     ),
             )
@@ -190,24 +185,29 @@ impl Render for SecurityModal {
                     .child(
                         v_flex()
                             .child(
-                                Label::new(
-                                    "Untrusted projects are opened in Restricted Mode to protect your system.",
-                                )
-                                .color(Color::Muted),
+                                Label::new(t!("workspace.security_modal.restricted_mode"))
+                                    .color(Color::Muted),
                             )
                             .child(
-                                Label::new(
-                                    "Review .zed/settings.json for any extensions or commands configured by this project.",
-                                )
-                                .color(Color::Muted),
+                                Label::new(t!("workspace.security_modal.review_settings"))
+                                    .color(Color::Muted),
                             ),
                     )
                     .child(
                         v_flex()
-                            .child(Label::new("Restricted Mode prevents:").color(Color::Muted))
-                            .child(ListBulletItem::new("Project settings from being applied"))
-                            .child(ListBulletItem::new("Language servers from running"))
-                            .child(ListBulletItem::new("MCP Server integrations from installing")),
+                            .child(
+                                Label::new(t!("workspace.security_modal.restricted_mode_prevents"))
+                                    .color(Color::Muted),
+                            )
+                            .child(ListBulletItem::new(t!(
+                                "workspace.security_modal.project_settings_from_being_applied"
+                            )))
+                            .child(ListBulletItem::new(t!(
+                                "workspace.security_modal.language_servers_from_running"
+                            )))
+                            .child(ListBulletItem::new(t!(
+                                "workspace.security_modal.mcp_server_integrations_from_installing"
+                            ))),
                     )
                     .map(|this| {
                         let Some(trust_label) = trust_label else {
@@ -216,42 +216,51 @@ impl Render for SecurityModal {
                         match trust_input {
                             // Single project: the editable scope field replaces
                             // the static folder name, inline with the checkbox.
-                            Some(input) => this.child(
-                                // Top-aligned so the field's validation error
-                                // grows downward without shifting the checkbox;
-                                // the checkbox sits in a fixed-height box matching
-                                // the input row.
-                                h_flex()
-                                    .items_start()
-                                    .gap_1p5()
-                                    .child(
-                                        h_flex().h_8().child(
-                                        Checkbox::new(
-                                            "trust-parents",
-                                            ToggleState::from(self.trust_parents),
+                            Some(input) => {
+                                this.child(
+                                    // Top-aligned so the field's validation error
+                                    // grows downward without shifting the checkbox;
+                                    // the checkbox sits in a fixed-height box matching
+                                    // the input row.
+                                    h_flex()
+                                        .items_start()
+                                        .gap_1p5()
+                                        .child(
+                                            h_flex().h_8().child(
+                                                Checkbox::new(
+                                                    "trust-parents",
+                                                    ToggleState::from(self.trust_parents),
+                                                )
+                                                .label(t!(
+                                                    "workspace.security_modal.trust_all_projects_in"
+                                                ))
+                                                .on_click(cx.listener(
+                                                    |security_modal, state: &ToggleState, _, cx| {
+                                                        let trust_parents = state.selected();
+                                                        security_modal.trust_parents =
+                                                            trust_parents;
+                                                        let input =
+                                                            security_modal.trust_path_input.clone();
+                                                        let editor =
+                                                            input.read(cx).editor().clone();
+                                                        editor.set_read_only(!trust_parents, cx);
+                                                        if !trust_parents {
+                                                            input.update(cx, |input, cx| {
+                                                                input.set_error(
+                                                                    None::<SharedString>,
+                                                                    cx,
+                                                                )
+                                                            });
+                                                        }
+                                                        cx.notify();
+                                                        cx.stop_propagation();
+                                                    },
+                                                )),
+                                            ),
                                         )
-                                        .label("Trust all projects in")
-                                        .on_click(cx.listener(
-                                            |security_modal, state: &ToggleState, _, cx| {
-                                                let trust_parents = state.selected();
-                                                security_modal.trust_parents = trust_parents;
-                                                let input =
-                                                    security_modal.trust_path_input.clone();
-                                                let editor = input.read(cx).editor().clone();
-                                                editor.set_read_only(!trust_parents, cx);
-                                                if !trust_parents {
-                                                    input.update(cx, |input, cx| {
-                                                        input.set_error(None::<SharedString>, cx)
-                                                    });
-                                                }
-                                                cx.notify();
-                                                cx.stop_propagation();
-                                            },
-                                        )),
-                                        ),
-                                    )
-                                    .child(input),
-                            ),
+                                        .child(input),
+                                )
+                            }
                             // Zero or several projects: keep the static label.
                             None => this.child(
                                 Checkbox::new(
@@ -277,13 +286,10 @@ impl Render for SecurityModal {
                     .gap_1()
                     .justify_end()
                     .child(
-                        Button::new("rm", "Stay in Restricted Mode")
+                        Button::new("rm", t!("workspace.security_modal.stay_in_restricted_mode"))
                             .key_binding(
-                                KeyBinding::for_action(
-                                    &ToggleWorktreeSecurity,
-                                    cx,
-                                )
-                                .map(|kb| kb.size(rems_from_px(12_f32))),
+                                KeyBinding::for_action(&ToggleWorktreeSecurity, cx)
+                                    .map(|kb| kb.size(rems_from_px(12_f32))),
                             )
                             .on_click(cx.listener(move |security_modal, _, _, cx| {
                                 security_modal.trusted = Some(false);
@@ -292,7 +298,7 @@ impl Render for SecurityModal {
                             })),
                     )
                     .child(
-                        Button::new("tc", "Trust and Continue")
+                        Button::new("tc", t!("workspace.security_modal.trust_and_continue"))
                             .style(ButtonStyle::Filled)
                             .layer(ui::ElevationIndex::ModalSurface)
                             .key_binding(
@@ -317,7 +323,8 @@ impl SecurityModal {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let trust_path_input = cx.new(|cx| InputField::new(window, cx, "Folder to trust"));
+        let trust_path_input = cx
+            .new(|cx| InputField::new(window, cx, &t!("workspace.security_modal.folder_to_trust")));
         let task = cx.spawn(async |this, cx| {
             let home_dir = home_dir_task.await;
             this.update(cx, |this, cx| {

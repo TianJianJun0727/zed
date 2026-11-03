@@ -11,6 +11,7 @@ use settings::Settings;
 use ui::{Button, ButtonLike, Color, Icon, IconName, Label, Tooltip, h_flex, prelude::*};
 use util::ResultExt;
 use workspace::{HideStatusItem, StatusItemView, ToolbarItemEvent, Workspace, item::ItemHandle};
+use zed_i18n::t;
 
 use crate::{Deploy, IncludeWarnings, ProjectDiagnosticsEditor};
 
@@ -67,9 +68,9 @@ impl Render for DiagnosticIndicator {
                 .map_or(diagnostic.message.as_str(), |(first, _)| first);
             let diagnostics_already_active = self.any_active_diagnostics(cx);
             let tooltip = if !diagnostics_already_active {
-                "Expand Diagnostics"
+                t!("diagnostics.indicator.expand_diagnostics")
             } else {
-                "Next Diagnostic"
+                t!("diagnostics.indicator.next_diagnostic")
             };
             Some(
                 Button::new("diagnostic_message", SharedString::new(message))
@@ -78,7 +79,7 @@ impl Render for DiagnosticIndicator {
                     .tab_index(0isize)
                     .tooltip(move |_window, cx| {
                         Tooltip::for_action(
-                            tooltip,
+                            tooltip.clone(),
                             &editor::actions::GoToDiagnostic::default(),
                             cx,
                         )
@@ -92,8 +93,11 @@ impl Render for DiagnosticIndicator {
         };
 
         let diagnostics_label = match (self.summary.error_count, self.summary.warning_count) {
-            (0, 0) => "Project diagnostics: no problems".to_string(),
+            (0, 0) => t!("diagnostics.indicator.no_problems").to_string(),
             (errors, warnings) => {
+                // 复杂条件拼接(英文复数后缀 + 多段 join)暂不翻译,保持原样
+                // complex conditional concatenation (English plural suffix + multi-part
+                // join) is intentionally left untranslated
                 let mut parts = Vec::new();
                 if errors > 0 {
                     parts.push(format!(
@@ -118,7 +122,11 @@ impl Render for DiagnosticIndicator {
                     .tab_index(0isize)
                     .aria_label(diagnostics_label)
                     .tooltip(move |_window, cx| {
-                        Tooltip::for_action("Project Diagnostics", &Deploy, cx)
+                        Tooltip::for_action(
+                            t!("diagnostics.indicator.project_diagnostics"),
+                            &Deploy,
+                            cx,
+                        )
                     })
                     .on_click(cx.listener(|this, _, window, cx| {
                         if let Some(workspace) = this.workspace.upgrade() {

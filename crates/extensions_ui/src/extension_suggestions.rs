@@ -15,6 +15,7 @@ use workspace::notifications::{
     NotificationId, markdown_style, simple_message_notification::MessageNotification,
 };
 use workspace::{AppState, Event as WorkspaceEvent, Workspace};
+use zed_i18n::t;
 
 struct ExtensionSuggestionNotification;
 
@@ -141,7 +142,7 @@ fn suggest_for_buffer(
                 .more_info_message("Learn more")
                 .more_info_url(suggestion.docs_url)
                 .primary_message(suggestion.install_message)
-                .secondary_message("Don't show again")
+                .secondary_message(t!("extensions_ui.extension_suggestions.dont_show_again"))
             });
         }
         None => {
@@ -163,13 +164,15 @@ fn suggest_for_buffer(
             };
             show_suggestion(workspace, &extension_id, cx, |cx| {
                 MessageNotification::new(
-                    format!(
-                        "Do you want to install the recommended '{extension_id}' extension for '{file_name_or_extension}' files?"
+                    t!(
+                        "extensions_ui.suggest.install_prompt",
+                        extension_id = extension_id,
+                        file_name = file_name_or_extension
                     ),
                     cx,
                 )
-                .primary_message("Yes, install extension")
-                .secondary_message("No, don't install it")
+                .primary_message(t!("extensions_ui.suggest.install_yes"))
+                .secondary_message(t!("extensions_ui.suggest.install_no"))
             });
         }
     }

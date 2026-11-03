@@ -1,0 +1,83 @@
+name: Local editor macOS
+
+on:
+  push:
+    branches: [feature/local-editor-i18n]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-editor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 180
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: '0'
+      CARGO_BUILD_JOBS: '3'
+      CARGO_PROFILE_RELEASE_LTO: 'false'
+      CARGO_PROFILE_RELEASE_DEBUG: '0'
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
+      ZED_RELEASE_CHANNEL: dev
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          rustup show
+          command -v cmake || brew install cmake
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-26-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            macos-26-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock') }}-
+            macos-26-${{ hashFiles('rust-toolchain.toml') }}-
+      - name: Locale resources
+        run: python3 script/check-locales.py
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Localization tests
+        run: cargo test --locked -p zed_i18n
+      - name: Check application types
+        run: cargo check --locked --release -p zed --bin zed -p cli
+      - name: Build application and CLI
+        run: cargo build --locked --release -p zed --bin zed -p cli
+      - name: Bundle unsigned development app
+        run: |
+          cargo install cargo-bundle --git https://github.com/zed-industries/cargo-bundle.git --branch zed-deploy --locked
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path('crates/zed/Cargo.toml')
+          manifest.write_text(manifest.read_text().replace('[package.metadata.bundle-dev]', '[package.metadata.bundle]'))
+          PY
+          cargo bundle --release --package zed --bin zed --format osx
+          APP='target/release/bundle/osx/Zed Dev.app'
+          cp target/release/cli "$APP/Contents/MacOS/cli"
+          cp crates/zed/resources/Document.icns "$APP/Contents/Resources/Document.icns"
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" target/Zed-Local-macOS-arm64.zip
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: Zed-Local-macOS-arm64
+          path: target/Zed-Local-macOS-arm64.zip
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: always() && steps.cache.outcome == 'success' && steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.cache.outputs.cache-primary-key }}

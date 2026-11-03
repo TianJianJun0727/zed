@@ -1,8 +1,8 @@
 use ui::{SpinnerLabel, div, prelude::*};
-
-use crate::TableView;
+use zed_i18n::t;
 
 use super::settings::settings_popover_menu;
+use crate::TableView;
 
 impl Render for TableView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -51,10 +51,12 @@ impl Render for TableView {
                                         h_flex()
                                             .gap_2()
                                             .child(SpinnerLabel::new())
-                                            .child("Loading…"),
+                                            .child(t!("csv_preview.empty_state.loading")),
                                     )
                                 })
-                                .when(!is_loading, |div| div.child("No data to display")),
+                                .when(!is_loading, |div| {
+                                    div.child(t!("csv_preview.empty_state.no_content"))
+                                }),
                         )
                         .into_any_element()
                 } else {

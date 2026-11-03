@@ -1,3 +1,17 @@
+> [!IMPORTANT]
+> Remove this line to confirm you've reviewed this PR before submitting.
+
+This fork adds English/Simplified Chinese UI localization adapted from
+[ReachForStar/zed-ZH_CN](https://github.com/ReachForStar/zed-ZH_CN)
+(commit `09a6ba45faf90d5b2231c867b3f8ccac6952cefe`, GPL-3.0-or-later).
+Set `ui_language` to `system` (default), `en`, or `zh-CN`. Unsupported system
+languages use English. Menus and windows refresh when the language changes;
+reopen an existing settings window or command palette to rebuild its cached text.
+Command IDs, key bindings and JSON setting names remain unchanged.
+
+The `Local editor macOS` workflow builds an unsigned Apple Silicon development
+app and CLI on GitHub Actions, with an artifact available from the workflow run.
+
 # Zed
 
 [![Zed](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/zed-industries/zed/main/assets/badge/v0.json)](https://zed.dev)

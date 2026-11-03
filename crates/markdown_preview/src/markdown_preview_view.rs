@@ -52,6 +52,7 @@ use workspace::{
     ItemId, ItemNavHistory, Pane, SaveIntent, Workspace, WorkspaceId, delete_unloaded_items,
 };
 use zed_actions::{DecreaseBufferFontSize, IncreaseBufferFontSize, ResetBufferFontSize};
+use zed_i18n::t;
 
 use crate::markdown_preview_settings::MarkdownPreviewSettings;
 use crate::{
@@ -1746,7 +1747,10 @@ impl Item for MarkdownPreviewView {
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Vec<(SharedString, Box<dyn Action>)> {
-        vec![("Show Source".into(), Box::new(CloseAndReturnToEditor))]
+        vec![(
+            t!("markdown_preview.tab_menu.show_source").into(),
+            Box::new(CloseAndReturnToEditor),
+        )]
     }
 
     fn added_to_workspace(
@@ -1965,7 +1969,7 @@ impl Render for MarkdownPreviewView {
                                         menu.when_some(focus, |menu, focus| menu.context(focus))
                                             .when_some(selected_text, |menu, text| {
                                                 menu.entry(
-                                                    "Copy",
+                                                    t!("markdown_preview.context_menu.copy"),
                                                     Some(Box::new(markdown::Copy)),
                                                     move |_, cx| {
                                                         cx.write_to_clipboard(
@@ -1978,7 +1982,9 @@ impl Render for MarkdownPreviewView {
                                             })
                                             .when_some(selected_markdown, |menu, text| {
                                                 menu.entry(
-                                                    "Copy as Markdown",
+                                                    t!(
+                                                        "markdown_preview.context_menu.copy_as_markdown"
+                                                    ),
                                                     Some(Box::new(markdown::CopyAsMarkdown)),
                                                     move |_, cx| {
                                                         cx.write_to_clipboard(
@@ -1990,11 +1996,15 @@ impl Render for MarkdownPreviewView {
                                                 )
                                             })
                                             .when_some(context_menu_link, |menu, url| {
-                                                menu.entry("Copy Link", None, move |_, cx| {
-                                                    cx.write_to_clipboard(
-                                                        ClipboardItem::new_string(url.to_string()),
-                                                    );
-                                                })
+                                                menu.entry(
+                                                    t!("markdown_preview.context_menu.copy_link"),
+                                                    None,
+                                                    move |_, cx| {
+                                                        cx.write_to_clipboard(
+                                                            ClipboardItem::new_string(url.to_string()),
+                                                        );
+                                                    },
+                                                )
                                             })
                                     }))
                                 });

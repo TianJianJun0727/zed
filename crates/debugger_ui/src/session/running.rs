@@ -61,6 +61,7 @@ use workspace::{
     ActivePaneDecorator, DraggedTab, Item, ItemHandle, Member, Pane, PaneGroup, SplitDirection,
     Workspace, item::TabContentParams, move_item, pane::Event,
 };
+use zed_i18n::t;
 
 static PROCESS_ID_PLACEHOLDER: LazyLock<String> =
     LazyLock::new(|| task::VariableName::PickProcessId.template_value());
@@ -399,10 +400,7 @@ impl Item for SubView {
 impl Render for SubView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .id(format!(
-                "subview-container-{}",
-                self.kind.to_shared_string()
-            ))
+            .id(format!("subview-container-{:?}", self.kind))
             .size_full()
             .border_1()
             .when(self.item_focus_handle.contains_focused(window, cx), |el| {
@@ -615,7 +613,11 @@ fn render_debugger_tab_bar(
                     .tooltip({
                         let focus_handle = focus_handle.clone();
                         move |_window, cx| {
-                            let zoomed_text = if zoomed { "Minimize" } else { "Expand" };
+                            let zoomed_text = if zoomed {
+                                t!("debugger_ui.pane.minimize")
+                            } else {
+                                t!("debugger_ui.pane.expand")
+                            };
                             Tooltip::for_action_in(
                                 zoomed_text,
                                 &ToggleExpandItem,
@@ -1369,7 +1371,7 @@ impl RunningState {
             .clone()
             .filter(|title| !title.is_empty())
             .or_else(|| command.clone())
-            .unwrap_or_else(|| "Debug terminal".to_string());
+            .unwrap_or_else(|| t!("debugger_ui.pane.debug_terminal").to_string());
         let kind = task::SpawnInTerminal {
             id: task::TaskId("debug".to_string()),
             full_label: title.clone(),

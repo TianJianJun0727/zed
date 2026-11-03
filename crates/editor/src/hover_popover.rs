@@ -31,6 +31,7 @@ use ui::{CopyButton, Scrollbars, WithScrollbar, prelude::*, theme_is_transparent
 use url::Url;
 use util::TryFutureExt;
 use workspace::{OpenOptions, OpenVisible, Workspace};
+use zed_i18n::t;
 
 use crate::debugger_hover::{
     DEBUGGER_HOVER_MIN_WIDTH, DebuggerHoverView, build_debugger_hover_view,
@@ -1807,7 +1808,8 @@ impl DiagnosticPopover {
                             .message
                             .as_shared_string()
                             .clone();
-                        CopyButton::new("copy-diagnostic", message).tooltip_label("Copy Diagnostic")
+                        CopyButton::new("copy-diagnostic", message)
+                            .tooltip_label(t!("editor.hover_popover.copy_diagnostic"))
                     }))
                     .custom_scrollbars(
                         Scrollbars::for_settings::<EditorSettingsScrollbarProxy>()
