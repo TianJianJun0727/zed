@@ -20,7 +20,6 @@ duplicate = "Duplicate"
 paste = "Paste"
 undo = "Undo"
 redo = "Redo"
-download = "Download..."
 copy_path = "Copy Path"
 copy_relative_path = "Copy Relative Path"
 restore_file = "Restore File"
@@ -48,9 +47,6 @@ already_exists = "File or directory '%{name}' already exists at location. Please
 # 对话框与按钮 / prompts and dialog buttons
 [project_panel.prompt]
 failed_to_open_file = "Failed to open file"
-disconnected_from_ssh = "Disconnected from SSH host"
-disconnected_from_remote = "Disconnected from remote project"
-not_shared_by_host = "%{path} is not shared by the host. This could be because it has been marked as `private`"
 discard_changes = "Discard changes to %{file}?"
 restore = "Restore"
 cancel = "Cancel"
@@ -59,7 +55,6 @@ trash = "Trash"
 delete = "Delete"
 replace_file = "A file or folder with name %{name} already exists in the destination folder. Do you want to replace it?"
 replace = "Replace"
-download = "Download"
 
 # 通知 toast / toast notifications
 [project_panel.toast]
@@ -70,8 +65,6 @@ failed_to_trash_one = "Failed to trash %{failed} of %{total} file."
 failed_to_trash_many = "Failed to trash %{failed} of %{total} files."
 failed_to_delete_one = "Failed to delete %{failed} of %{total} file."
 failed_to_delete_many = "Failed to delete %{failed} of %{total} files."
-downloading = "Downloading %{done}/%{total} files..."
-downloaded = "Downloaded %{count} files"
 excluded_directory = "Created an excluded directory at %{path}.\nAlter `file_scan_exclusions` in the settings to show it in the panel"
 
 # 提示浮层 / tooltips

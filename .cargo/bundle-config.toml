@@ -17,7 +17,6 @@ gpui_windows = { opt-level = 3 }
 language = { opt-level = 3 }
 multi_buffer = { opt-level = 3 }
 project = { opt-level = 3 }
-remote_server = { opt-level = 3 }
 rope = { opt-level = 3 }
 scheduler = { opt-level = 3 }
 sum_tree = { opt-level = 3 }

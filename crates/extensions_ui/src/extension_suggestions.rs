@@ -804,7 +804,7 @@ mod tests {
             extension_host::init(
                 Arc::new(ExtensionHostProxy::new()),
                 app_state.fs.clone(),
-                app_state.client.clone(),
+                app_state.http_client.clone(),
                 app_state.node_runtime.clone(),
                 cx,
             );

@@ -133,10 +133,8 @@ pub(crate) mod m_2025_01_02 {
 
 pub(crate) mod m_2025_01_29 {
     mod keymap;
-    mod settings;
 
     pub(crate) use keymap::KEYMAP_PATTERNS;
-    pub(crate) use settings::{SETTINGS_PATTERNS, replace_edit_prediction_provider_setting};
 }
 
 pub(crate) mod m_2025_01_30 {
@@ -167,46 +165,8 @@ pub(crate) mod m_2025_03_29 {
 
 pub(crate) mod m_2025_04_15 {
     mod keymap;
-    mod settings;
 
     pub(crate) use keymap::KEYMAP_PATTERNS;
-    pub(crate) use settings::SETTINGS_PATTERNS;
-}
-
-pub(crate) mod m_2025_04_21 {
-    mod settings;
-
-    pub(crate) use settings::SETTINGS_PATTERNS;
-}
-
-pub(crate) mod m_2025_04_23 {
-    mod settings;
-
-    pub(crate) use settings::SETTINGS_PATTERNS;
-}
-
-pub(crate) mod m_2025_05_05 {
-    mod settings;
-
-    pub(crate) use settings::SETTINGS_PATTERNS;
-}
-
-pub(crate) mod m_2025_05_08 {
-    mod settings;
-
-    pub(crate) use settings::SETTINGS_PATTERNS;
-}
-
-pub(crate) mod m_2025_06_25 {
-    mod settings;
-
-    pub(crate) use settings::SETTINGS_PATTERNS;
-}
-
-pub(crate) mod m_2025_06_27 {
-    mod settings;
-
-    pub(crate) use settings::SETTINGS_PATTERNS;
 }
 
 pub(crate) mod m_2025_07_08 {
@@ -225,12 +185,6 @@ pub(crate) mod m_2025_10_02 {
     mod settings;
 
     pub(crate) use settings::remove_formatters_on_save;
-}
-
-pub(crate) mod m_2025_10_03 {
-    mod settings;
-
-    pub(crate) use settings::SETTINGS_PATTERNS;
 }
 
 pub(crate) mod m_2025_10_16 {
@@ -257,28 +211,10 @@ pub(crate) mod m_2025_11_12 {
     pub(crate) use settings::SETTINGS_PATTERNS;
 }
 
-pub(crate) mod m_2025_11_20 {
-    mod settings;
-
-    pub(crate) use settings::SETTINGS_PATTERNS;
-}
-
-pub(crate) mod m_2025_11_25 {
-    mod settings;
-
-    pub(crate) use settings::remove_context_server_source;
-}
-
 pub(crate) mod m_2025_12_01 {
     mod settings;
 
     pub(crate) use settings::SETTINGS_PATTERNS;
-}
-
-pub(crate) mod m_2025_12_08 {
-    mod keymap;
-
-    pub(crate) use keymap::KEYMAP_PATTERNS;
 }
 
 pub(crate) mod m_2025_12_15 {
@@ -293,58 +229,16 @@ pub(crate) mod m_2025_01_27 {
     pub(crate) use settings::make_auto_indent_an_enum;
 }
 
-pub(crate) mod m_2026_02_02 {
-    mod settings;
-
-    pub(crate) use settings::move_edit_prediction_provider_to_edit_predictions;
-}
-
-pub(crate) mod m_2026_02_03 {
-    mod settings;
-
-    pub(crate) use settings::migrate_experimental_sweep_mercury;
-}
-
-pub(crate) mod m_2026_02_04 {
-    mod settings;
-
-    pub(crate) use settings::migrate_tool_permission_defaults;
-}
-
-pub(crate) mod m_2026_02_25 {
-    mod settings;
-
-    pub(crate) use settings::migrate_builtin_agent_servers_to_registry;
-}
-
 pub(crate) mod m_2026_03_16 {
     mod settings;
 
     pub(crate) use settings::SETTINGS_PATTERNS;
 }
 
-pub(crate) mod m_2026_03_23 {
-    mod keymap;
-
-    pub(crate) use keymap::KEYMAP_PATTERNS;
-}
-
-pub(crate) mod m_2026_03_30 {
-    mod settings;
-
-    pub(crate) use settings::make_play_sound_when_agent_done_an_enum;
-}
-
 pub(crate) mod m_2026_04_01 {
     mod settings;
 
     pub(crate) use settings::restructure_profiles_with_settings_key;
-}
-
-pub(crate) mod m_2026_04_10 {
-    mod settings;
-
-    pub(crate) use settings::rename_web_search_to_search_web;
 }
 
 pub(crate) mod m_2026_04_17 {
@@ -375,16 +269,4 @@ pub(crate) mod m_2026_08_30 {
     mod settings;
 
     pub(crate) use settings::nest_markdown_preview_settings;
-}
-
-pub(crate) mod m_2026_09_16 {
-    mod settings;
-
-    pub(crate) use settings::nest_agent_threads_sidebar_settings;
-}
-
-pub(crate) mod m_2026_09_29 {
-    mod settings;
-
-    pub(crate) use settings::move_copilot_enterprise_uri;
 }

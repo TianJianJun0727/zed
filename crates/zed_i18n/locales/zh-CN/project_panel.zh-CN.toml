@@ -20,7 +20,6 @@ duplicate = "创建副本"
 paste = "粘贴"
 undo = "撤销"
 redo = "重做"
-download = "下载..."
 copy_path = "复制路径"
 copy_relative_path = "复制相对路径"
 restore_file = "还原文件"
@@ -48,9 +47,6 @@ already_exists = "此位置已存在文件或目录“%{name}”。请换一个�
 # 对话框与按钮 / prompts and dialog buttons
 [project_panel.prompt]
 failed_to_open_file = "无法打开文件"
-disconnected_from_ssh = "已与 SSH 主机断开连接"
-disconnected_from_remote = "已与远程项目断开连接"
-not_shared_by_host = "%{path} 未被主机共享。这可能是因为其被标记为 `private`"
 discard_changes = "丢弃对 %{file} 的更改？"
 restore = "还原"
 cancel = "取消"
@@ -59,7 +55,6 @@ trash = "移到废纸篓"
 delete = "删除"
 replace_file = "目标文件夹中已存在名为 %{name} 的文件或文件夹。是否替换？"
 replace = "替换"
-download = "下载"
 
 # 通知 toast / toast notifications
 [project_panel.toast]
@@ -70,8 +65,6 @@ failed_to_trash_one = "%{total} 个文件中有 %{failed} 个未能移到回收�
 failed_to_trash_many = "%{total} 个文件中有 %{failed} 个未能移到回收站。"
 failed_to_delete_one = "%{total} 个文件中有 %{failed} 个未能删除。"
 failed_to_delete_many = "%{total} 个文件中有 %{failed} 个未能删除。"
-downloading = "正在下载文件（%{done}/%{total}）…"
-downloaded = "已下载 %{count} 个文件"
 excluded_directory = "已在 %{path} 创建一个被排除的目录。\n修改设置中的 `file_scan_exclusions` 即可在面板中显示它"
 
 # 提示浮层 / tooltips

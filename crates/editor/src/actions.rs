@@ -425,14 +425,8 @@ actions!(
 actions!(
     editor,
     [
-        /// Accepts the full edit prediction.
-        AcceptEditPrediction,
         /// Amends the editor text with hint's edit (if sent).
         AcceptInlayHint,
-        /// Accepts a partial edit prediction.
-        #[action(deprecated_aliases = ["editor::AcceptPartialCopilotSuggestion"])]
-        AcceptNextWordEditPrediction,
-        AcceptNextLineEditPrediction,
         /// Applies all diff hunks in the editor.
         ApplyAllDiffHunks,
         /// Applies the diff hunk at the current position.
@@ -517,8 +511,6 @@ actions!(
         DeleteToEndOfLine,
         /// Diffs the text stored in the clipboard against the current selection.
         DiffClipboardWithSelection,
-        /// Displays names of all active cursors.
-        DisplayCursorNames,
         /// Duplicates the current line below.
         DuplicateLineDown,
         /// Duplicates the current line above.
@@ -719,8 +711,6 @@ actions!(
         NewlineAbove,
         /// Inserts a new line below the current line.
         NewlineBelow,
-        /// Navigates to the next edit prediction.
-        NextEditPrediction,
         /// Scrolls to the next screen.
         NextScreen,
         /// Goes to the next snippet tabstop if one exists.
@@ -758,8 +748,6 @@ actions!(
         PageUp,
         /// Pastes from clipboard.
         Paste,
-        /// Navigates to the previous edit prediction.
-        PreviousEditPrediction,
         /// Goes to the previous snippet tabstop if one exists.
         PreviousSnippetTabstop,
         /// Redoes the last undone edit.
@@ -850,8 +838,6 @@ actions!(
         ShowCompletions,
         /// Shows the system character palette.
         ShowCharacterPalette,
-        /// Shows edit prediction at cursor.
-        ShowEditPrediction,
         /// Shows signature help for the current function.
         ShowSignatureHelp,
         /// Shows word completions.
@@ -916,8 +902,6 @@ actions!(
         ToggleInlineValues,
         /// Toggles inline diagnostics display.
         ToggleInlineDiagnostics,
-        /// Toggles edit prediction feature.
-        ToggleEditPrediction,
         /// Toggles line numbers display.
         ToggleLineNumbers,
         /// Toggles the minimap display.
@@ -931,12 +915,6 @@ actions!(
         /// Toggles diff display for selected hunks.
         #[action(deprecated_aliases = ["editor::ToggleHunkDiff"])]
         ToggleSelectedDiffHunks,
-        /// Stores the diff review comment locally (for later batch submission).
-        SubmitDiffReviewComment,
-        /// Toggles the expanded state of the comments section in the overlay.
-        ToggleReviewCommentsExpanded,
-        /// Sends all stored review comments to the Agent panel.
-        SendReviewToAgent,
         /// Toggles the selection menu.
         ToggleSelectionMenu,
         /// Toggles soft wrap mode.
@@ -1039,36 +1017,4 @@ impl Default for FindAllReferences {
             open_results_in: None,
         }
     }
-}
-
-/// Edits a stored review comment inline.
-#[derive(PartialEq, Clone, Deserialize, JsonSchema, Action)]
-#[action(namespace = editor)]
-#[serde(deny_unknown_fields)]
-pub struct EditReviewComment {
-    pub id: usize,
-}
-
-/// Deletes a stored review comment.
-#[derive(PartialEq, Clone, Deserialize, JsonSchema, Action)]
-#[action(namespace = editor)]
-#[serde(deny_unknown_fields)]
-pub struct DeleteReviewComment {
-    pub id: usize,
-}
-
-/// Confirms an inline edit of a review comment.
-#[derive(PartialEq, Clone, Deserialize, JsonSchema, Action)]
-#[action(namespace = editor)]
-#[serde(deny_unknown_fields)]
-pub struct ConfirmEditReviewComment {
-    pub id: usize,
-}
-
-/// Cancels an inline edit of a review comment.
-#[derive(PartialEq, Clone, Deserialize, JsonSchema, Action)]
-#[action(namespace = editor)]
-#[serde(deny_unknown_fields)]
-pub struct CancelEditReviewComment {
-    pub id: usize,
 }

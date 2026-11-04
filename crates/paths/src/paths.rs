@@ -15,9 +15,9 @@ pub const EDITORCONFIG_NAME: &str = ".editorconfig";
 /// and state directory paths.
 ///
 /// Forks should change this to avoid colliding with Zed's user data.
-pub const APP_NAME: &str = "Zed";
+pub const APP_NAME: &str = "Zed Lite";
 
-/// Lowercased form of [`APP_NAME`], for use in XDG-style paths on
+/// Lowercased form of [`APP_NAME`] with spaces replaced by hyphens, for paths on
 /// Linux/FreeBSD and the macOS `~/.config` fallback.
 pub const APP_NAME_LOWERCASE: &str = {
     assert!(!APP_NAME.is_empty(), "APP_NAME must not be empty");
@@ -34,7 +34,11 @@ pub const APP_NAME_LOWERCASE: &str = {
                 APP_NAME.as_bytes()[i] >= 0x20,
                 "APP_NAME must not contain control characters"
             );
-            bytes[i] = APP_NAME.as_bytes()[i];
+            bytes[i] = if APP_NAME.as_bytes()[i] == b' ' {
+                b'-'
+            } else {
+                APP_NAME.as_bytes()[i]
+            };
             i += 1;
         }
         bytes.make_ascii_lowercase();
@@ -53,32 +57,17 @@ static CUSTOM_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// The resolved data directory, combining custom override or platform defaults.
 /// This is set once and cached for subsequent calls.
-/// On macOS, this is `~/Library/Application Support/Zed`.
-/// On Linux/FreeBSD, this is `$XDG_DATA_HOME/zed`.
+/// On macOS, this is `~/Library/Application Support/Zed Lite`.
+/// On Linux/FreeBSD, this is `$XDG_DATA_HOME/zed-lite`.
 /// On Windows, this is `%LOCALAPPDATA%\Zed`.
 static CURRENT_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// The resolved config directory, combining custom override or platform defaults.
 /// This is set once and cached for subsequent calls.
-/// On macOS, this is `~/.config/zed`.
-/// On Linux/FreeBSD, this is `$XDG_CONFIG_HOME/zed`.
+/// On macOS, this is `~/.config/zed-lite`.
+/// On Linux/FreeBSD, this is `$XDG_CONFIG_HOME/zed-lite`.
 /// On Windows, this is `%APPDATA%\Zed`.
 static CONFIG_DIR: OnceLock<PathBuf> = OnceLock::new();
-
-/// Returns the relative path to the zed_server directory on the ssh host.
-pub fn remote_server_dir_relative() -> &'static RelPath {
-    static CACHED: LazyLock<&'static RelPath> =
-        LazyLock::new(|| RelPath::from_unix_str(".zed_server").unwrap());
-    *CACHED
-}
-
-// Remove this once 223 goes stable
-/// Returns the relative path to the zed_wsl_server directory on the wsl host.
-pub fn remote_wsl_server_dir_relative() -> &'static RelPath {
-    static CACHED: LazyLock<&'static RelPath> =
-        LazyLock::new(|| RelPath::from_unix_str(".zed_wsl_server").unwrap());
-    *CACHED
-}
 
 /// Sets a custom directory for all user data, overriding the default data directory.
 /// This function must be called before any other path operations that depend on the data directory.
@@ -236,12 +225,6 @@ pub fn logs_dir() -> &'static PathBuf {
     })
 }
 
-/// Returns the path to the Zed server directory on this SSH host.
-pub fn remote_server_state_dir() -> &'static PathBuf {
-    static REMOTE_SERVER_STATE: OnceLock<PathBuf> = OnceLock::new();
-    REMOTE_SERVER_STATE.get_or_init(|| data_dir().join("server_state"))
-}
-
 /// Returns the path to the `Zed.log` file.
 pub fn log_file() -> &'static PathBuf {
     static LOG_FILE: OnceLock<PathBuf> = OnceLock::new();
@@ -316,54 +299,12 @@ pub fn debug_scenarios_file() -> &'static PathBuf {
     DEBUG_SCENARIOS_FILE.get_or_init(|| config_dir().join("debug.json"))
 }
 
-/// Returns the path to the user-global `AGENTS.md` file.
-///
-/// This file holds personal agent instructions that apply to every project the
-/// user opens, and is loaded into the native Zed agent's system prompt.
-pub fn agents_file() -> &'static PathBuf {
-    static AGENTS_FILE: OnceLock<PathBuf> = OnceLock::new();
-    AGENTS_FILE.get_or_init(|| config_dir().join("AGENTS.md"))
-}
-
-/// User-facing display form of the user-global `AGENTS.md` file path —
-/// i.e. what a human should see in messages and prompts, with the
-/// platform's native path separator and home/config directory shorthand.
-///
-/// Windows doesn't recognize `~` as the home directory, so the env-var
-/// form (`%APPDATA%`) is used there instead. Note that this is the
-/// *typical* location: a user with `XDG_CONFIG_HOME` set or running in a
-/// Flatpak sandbox would see a different `agents_file()` at runtime than
-/// this displays. The display string trades that precision for
-/// readability in announcement copy.
-#[cfg(target_os = "windows")]
-pub const GLOBAL_AGENTS_FILE_DISPLAY: &str =
-    const_format::concatcp!("%APPDATA%\\", APP_NAME, "\\AGENTS.md");
-#[cfg(not(target_os = "windows"))]
-pub const GLOBAL_AGENTS_FILE_DISPLAY: &str =
-    const_format::concatcp!("~/.config/", APP_NAME_LOWERCASE, "/AGENTS.md");
-
 /// Returns the path to the extensions directory.
 ///
 /// This is where installed extensions are stored.
 pub fn extensions_dir() -> &'static PathBuf {
     static EXTENSIONS_DIR: OnceLock<PathBuf> = OnceLock::new();
     EXTENSIONS_DIR.get_or_init(|| data_dir().join("extensions"))
-}
-
-/// Returns the path to the extensions directory.
-///
-/// This is where installed extensions are stored on a remote.
-pub fn remote_extensions_dir() -> &'static PathBuf {
-    static EXTENSIONS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    EXTENSIONS_DIR.get_or_init(|| data_dir().join("remote_extensions"))
-}
-
-/// Returns the path to the extensions directory.
-///
-/// This is where installed extensions are stored on a remote.
-pub fn remote_extensions_uploads_dir() -> &'static PathBuf {
-    static UPLOAD_DIR: OnceLock<PathBuf> = OnceLock::new();
-    UPLOAD_DIR.get_or_init(|| remote_extensions_dir().join("uploads"))
 }
 
 /// Returns the path to the themes directory.
@@ -378,61 +319,6 @@ pub fn themes_dir() -> &'static PathBuf {
 pub fn snippets_dir() -> &'static PathBuf {
     static SNIPPETS_DIR: OnceLock<PathBuf> = OnceLock::new();
     SNIPPETS_DIR.get_or_init(|| config_dir().join("snippets"))
-}
-
-/// Returns the path to the contexts directory.
-///
-/// This is where the prompts for use with the Assistant are stored.
-pub fn prompts_dir() -> &'static PathBuf {
-    static PROMPTS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    PROMPTS_DIR.get_or_init(|| {
-        if cfg!(target_os = "macos") {
-            config_dir().join("prompts")
-        } else {
-            data_dir().join("prompts")
-        }
-    })
-}
-
-/// Returns the path to the prompt templates directory.
-///
-/// This is where the prompt templates for core features can be overridden with templates.
-///
-/// # Arguments
-///
-/// * `dev_mode` - If true, assumes the current working directory is the Zed repository.
-pub fn prompt_overrides_dir(repo_path: Option<&Path>) -> PathBuf {
-    if let Some(path) = repo_path {
-        let dev_path = path.join("assets").join("prompts");
-        if dev_path.exists() {
-            return dev_path;
-        }
-    }
-
-    static PROMPT_TEMPLATES_DIR: OnceLock<PathBuf> = OnceLock::new();
-    PROMPT_TEMPLATES_DIR
-        .get_or_init(|| {
-            if cfg!(target_os = "macos") {
-                config_dir().join("prompt_overrides")
-            } else {
-                data_dir().join("prompt_overrides")
-            }
-        })
-        .clone()
-}
-
-/// Returns the path to the semantic search's embeddings directory.
-///
-/// This is where the embeddings used to power semantic search are stored.
-pub fn embeddings_dir() -> &'static PathBuf {
-    static EMBEDDINGS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    EMBEDDINGS_DIR.get_or_init(|| {
-        if cfg!(target_os = "macos") {
-            config_dir().join("embeddings")
-        } else {
-            data_dir().join("embeddings")
-        }
-    })
 }
 
 /// Returns the path to the languages directory.
@@ -451,36 +337,10 @@ pub fn debug_adapters_dir() -> &'static PathBuf {
     DEBUG_ADAPTERS_DIR.get_or_init(|| data_dir().join("debug_adapters"))
 }
 
-/// Returns the path to the external agents directory
-///
-/// This is where agent servers are downloaded to
-pub fn external_agents_dir() -> &'static PathBuf {
-    static EXTERNAL_AGENTS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    EXTERNAL_AGENTS_DIR.get_or_init(|| data_dir().join("external_agents"))
-}
-
-/// Returns the path to the Copilot directory.
-pub fn copilot_dir() -> &'static PathBuf {
-    static COPILOT_DIR: OnceLock<PathBuf> = OnceLock::new();
-    COPILOT_DIR.get_or_init(|| data_dir().join("copilot"))
-}
-
 /// Returns the path to the default Prettier directory.
 pub fn default_prettier_dir() -> &'static PathBuf {
     static DEFAULT_PRETTIER_DIR: OnceLock<PathBuf> = OnceLock::new();
     DEFAULT_PRETTIER_DIR.get_or_init(|| data_dir().join("prettier"))
-}
-
-/// Returns the path to the remote server binaries directory.
-pub fn remote_servers_dir() -> &'static PathBuf {
-    static REMOTE_SERVERS_DIR: OnceLock<PathBuf> = OnceLock::new();
-    REMOTE_SERVERS_DIR.get_or_init(|| data_dir().join("remote_servers"))
-}
-
-/// Returns the path to the directory where the devcontainer CLI is installed.
-pub fn devcontainer_dir() -> &'static PathBuf {
-    static DEVCONTAINER_DIR: OnceLock<PathBuf> = OnceLock::new();
-    DEVCONTAINER_DIR.get_or_init(|| data_dir().join("devcontainer"))
 }
 
 /// Returns the relative path to a `.zed` folder within a project.
@@ -535,18 +395,6 @@ pub fn local_vscode_launch_file_relative_path() -> &'static RelPath {
     static CACHED: LazyLock<&'static RelPath> =
         LazyLock::new(|| RelPath::from_unix_str(".vscode/launch.json").unwrap());
     *CACHED
-}
-
-pub fn user_ssh_config_file() -> PathBuf {
-    home_dir().join(".ssh/config")
-}
-
-pub fn global_ssh_config_file() -> Option<&'static Path> {
-    if cfg!(windows) {
-        None
-    } else {
-        Some(Path::new("/etc/ssh/ssh_config"))
-    }
 }
 
 /// Returns candidate paths for the vscode user settings file

@@ -1503,34 +1503,6 @@ impl Editor {
         }
     }
 
-    /// Re-publishes the current selections to collaborators immediately. The
-    /// per-change broadcast in `selections_did_change` is skipped while the
-    /// project is unshared, so when a project becomes shared this is called to
-    /// re-establish this editor's cursor for peers, who would otherwise not see
-    /// it until the next selection change.
-    pub(crate) fn republish_active_selections(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let should_broadcast_selections = self
-            .collaboration_hub()
-            .is_some_and(|hub| hub.should_broadcast_selections(cx));
-        if should_broadcast_selections
-            && self.focus_handle.is_focused(window)
-            && self.leader_id.is_none()
-        {
-            self.buffer.update(cx, |buffer, cx| {
-                buffer.set_active_selections(
-                    &self.selections.disjoint_anchors_arc(),
-                    self.selections.line_mode(),
-                    self.cursor_shape,
-                    cx,
-                )
-            });
-        }
-    }
-
     fn selections_did_change(
         &mut self,
         local: bool,
@@ -1569,13 +1541,7 @@ impl Editor {
 
         let selection_anchors = self.selections.disjoint_anchors_arc();
 
-        let should_broadcast_selections = self
-            .collaboration_hub()
-            .is_some_and(|hub| hub.should_broadcast_selections(cx));
-        if should_broadcast_selections
-            && self.focus_handle.is_focused(window)
-            && self.leader_id.is_none()
-        {
+        if self.focus_handle.is_focused(window) {
             self.buffer.update(cx, |buffer, cx| {
                 buffer.set_active_selections(
                     &selection_anchors,
@@ -1668,7 +1634,6 @@ impl Editor {
             self.refresh_selected_text_highlights(&display_map, false, window, cx);
             self.refresh_matching_bracket_highlights(&display_map, cx);
             self.refresh_outline_symbols_at_cursor(cx);
-            self.update_visible_edit_prediction(window, cx);
             self.hide_blame_popover(true, cx);
             if self.git_blame_inline_enabled {
                 self.start_inline_blame_timer(window, cx);

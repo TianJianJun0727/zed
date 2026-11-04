@@ -1553,7 +1553,7 @@ fn resolve_preview_image(
             let is_remote = project
                 .read(cx)
                 .worktree_for_id(project_path.worktree_id, cx)
-                .is_some_and(|worktree| !worktree.read(cx).is_local());
+                .is_some_and(|worktree| !true);
             if is_remote {
                 return Some(image_store::project_image_source(
                     project.downgrade(),
@@ -1565,8 +1565,7 @@ fn resolve_preview_image(
             return path
                 .exists()
                 .then(|| ImageSource::Resource(Resource::Path(Arc::from(path.as_path()))));
-        } else if project.read(cx).is_remote() {
-            return None;
+        } else {
         }
     }
 
@@ -1736,10 +1735,6 @@ impl Item for MarkdownPreviewView {
             .editor
             .read(cx)
             .tab_tooltip_text(cx)
-    }
-
-    fn telemetry_event_text(&self) -> Option<&'static str> {
-        Some("Markdown Preview Opened")
     }
 
     fn tab_extra_context_menu_actions(

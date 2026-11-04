@@ -135,64 +135,19 @@ function BuildZedAndItsFriends {
     Copy-Item -Path ".\$CargoOutDir\explorer_command_injector.dll" -Destination "$innoDir\zed_explorer_command_injector.dll" -Force
 }
 
-function BuildRemoteServer {
-    Write-Output "Building remote_server for $target"
-    cargo --config .cargo/bundle-config.toml build --release --package remote_server --target $target
-
-    # Create zipped remote server binary
-    $remoteServerSrc = (Resolve-Path ".\$CargoOutDir\remote_server.exe").Path
-
-    if ($canCodeSign) {
-        Write-Output "Code signing remote_server.exe"
-        & "$innoDir\sign.ps1" $remoteServerSrc
-    }
-
-    $remoteServerDst = "$env:ZED_WORKSPACE\target\zed-remote-server-windows-$Architecture.zip"
-    Write-Output "Compressing remote_server to $remoteServerDst"
-    Compress-Archive -Path $remoteServerSrc -DestinationPath $remoteServerDst -Force
-
-    Write-Output "Remote server compressed successfully"
-}
 
 function ZipZedAndItsFriendsDebug {
     $items = @(
         ".\$CargoOutDir\zed.pdb",
         ".\$CargoOutDir\cli.pdb",
         ".\$CargoOutDir\auto_update_helper.pdb",
-        ".\$CargoOutDir\explorer_command_injector.pdb",
-        ".\$CargoOutDir\remote_server.pdb"
+        ".\$CargoOutDir\explorer_command_injector.pdb"
     )
 
     Compress-Archive -Path $items -DestinationPath ".\$CargoOutDir\zed-$env:RELEASE_VERSION-$env:ZED_RELEASE_CHANNEL.dbg.zip" -Force
 }
 
 
-function UploadToSentry {
-    if (-not (Get-Command "sentry-cli" -ErrorAction SilentlyContinue)) {
-        Write-Output "sentry-cli not found. skipping sentry upload."
-        Write-Output "install with: 'winget install -e --id=Sentry.sentry-cli'"
-        return
-    }
-    if ([string]::IsNullOrWhiteSpace($env:SENTRY_AUTH_TOKEN)) {
-        Write-Output "missing SENTRY_AUTH_TOKEN. skipping sentry upload."
-        return
-    }
-    Write-Output "Uploading zed debug symbols to sentry..."
-    for ($i = 1; $i -le 3; $i++) {
-        try {
-            sentry-cli debug-files upload --include-sources --wait -p zed -o zed-dev $CargoOutDir
-            break
-        }
-        catch {
-            Write-Output "Sentry upload attempt $i failed: $_"
-            if ($i -eq 3) {
-                Write-Output "All sentry upload attempts failed"
-                throw
-            }
-            Start-Sleep -Seconds 2
-        }
-    }
-}
 
 function MakeAppx {
     switch ($channel) {
@@ -386,7 +341,6 @@ CheckEnvironmentVariables
 PrepareForBundle
 GenerateLicenses
 BuildZedAndItsFriends
-BuildRemoteServer
 MakeAppx
 SignZedAndItsFriends
 ZipZedAndItsFriendsDebug
@@ -395,9 +349,6 @@ DownloadConpty
 CollectFiles
 BuildInstaller
 
-if($env:CI) {
-    UploadToSentry
-}
 
 if ($buildSuccess) {
     Write-Output "Build successful"

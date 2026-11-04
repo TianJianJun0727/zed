@@ -28,7 +28,6 @@ fn build_grouped_entries(store: &ReplStore, worktree_id: WorktreeId) -> Vec<Kern
 
     let mut python_envs = Vec::new();
     let mut jupyter_kernels = Vec::new();
-    let mut wsl_kernels = Vec::new();
     let mut remote_kernels = Vec::new();
 
     for spec in store.kernel_specifications_for_worktree(worktree_id) {
@@ -61,14 +60,8 @@ fn build_grouped_entries(store: &ReplStore, worktree_id: WorktreeId) -> Vec<Kern
                     is_recommended,
                 });
             }
-            KernelSpecification::JupyterServer(_) | KernelSpecification::SshRemote(_) => {
+            KernelSpecification::JupyterServer(_) => {
                 remote_kernels.push(KernelPickerEntry::Kernel {
-                    spec: spec.clone(),
-                    is_recommended,
-                });
-            }
-            KernelSpecification::WslRemote(_) => {
-                wsl_kernels.push(KernelPickerEntry::Kernel {
                     spec: spec.clone(),
                     is_recommended,
                 });
@@ -113,14 +106,6 @@ fn build_grouped_entries(store: &ReplStore, worktree_id: WorktreeId) -> Vec<Kern
             t!("repl.kernel_options.jupyter_kernels").into(),
         ));
         entries.extend(jupyter_kernels);
-    }
-
-    // WSL Kernels section
-    if !wsl_kernels.is_empty() {
-        entries.push(KernelPickerEntry::SectionHeader(
-            t!("repl.kernel_options.wsl_kernels").into(),
-        ));
-        entries.extend(wsl_kernels);
     }
 
     // Remote section
@@ -349,10 +334,8 @@ impl PickerDelegate for KernelPickerDelegate {
 
                 let subtitle = match spec {
                     KernelSpecification::Jupyter(_) => None,
-                    KernelSpecification::WslRemote(_) => Some(spec.path().to_string()),
-                    KernelSpecification::PythonEnv(_)
-                    | KernelSpecification::JupyterServer(_)
-                    | KernelSpecification::SshRemote(_) => {
+
+                    KernelSpecification::PythonEnv(_) | KernelSpecification::JupyterServer(_) => {
                         let env_kind = spec.environment_kind_label();
                         let path = spec.path();
                         match env_kind {

@@ -8,7 +8,6 @@ _version = 1
 recommended = "Recommended"
 python_environments = "Python Environments"
 jupyter_kernels = "Jupyter Kernels"
-wsl_kernels = "WSL Kernels"
 remote_servers = "Remote Servers"
 select_kernel_placeholder = "Select a kernel..."
 ipykernel_not_installed = "ipykernel not installed"

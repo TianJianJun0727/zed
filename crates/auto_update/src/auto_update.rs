@@ -1,13 +1,11 @@
 use anyhow::{Context as _, Result};
-use client::Client;
 use db::kvp::KeyValueStore;
 use futures_lite::StreamExt;
 use gpui::{
     App, AppContext as _, AsyncApp, BackgroundExecutor, Context, Entity, EventEmitter, Global,
     Task, TaskExt, Window, actions,
 };
-use http_client::{HttpClient, HttpClientWithUrl};
-use paths::remote_servers_dir;
+use http_client::{AsyncBody, HttpClient, HttpClientWithUrl};
 use release_channel::{AppCommitSha, ReleaseChannel};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -33,6 +31,10 @@ use util::command::new_command;
 use workspace::Workspace;
 use zed_i18n::t;
 
+pub const RELEASES_URL: &str = "https://github.com/TianJianJun0727/zed-lite/releases";
+const RELEASES_API_URL: &str =
+    "https://api.github.com/repos/TianJianJun0727/zed-lite/releases/latest";
+
 const SHOULD_SHOW_UPDATE_NOTIFICATION_KEY: &str = "auto-updater-should-show-updated-notification";
 
 #[derive(Debug)]
@@ -47,7 +49,6 @@ impl std::fmt::Display for MissingDependencyError {
 impl std::error::Error for MissingDependencyError {}
 const POLL_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const NIGHTLY_POLL_INTERVAL: Duration = Duration::from_secs(15 * 60);
-const REMOTE_SERVER_CACHE_LIMIT: usize = 5;
 
 #[cfg(target_os = "linux")]
 fn linux_rsync_install_hint() -> &'static str {
@@ -109,16 +110,6 @@ actions!(
         ViewReleaseNotes,
     ]
 );
-
-#[derive(Serialize, Debug)]
-pub struct AssetQuery<'a> {
-    asset: &'a str,
-    os: &'a str,
-    arch: &'a str,
-    metrics_id: Option<&'a str>,
-    system_id: Option<&'a str>,
-    is_staff: Option<bool>,
-}
 
 #[derive(Clone, Debug)]
 pub enum AutoUpdateStatus {
@@ -182,7 +173,7 @@ pub enum AutoUpdateEvent {
 pub struct AutoUpdater {
     status: AutoUpdateStatus,
     current_version: Version,
-    client: Arc<Client>,
+    client: Arc<HttpClientWithUrl>,
     pending_poll: Option<Task<Option<()>>>,
     quit_subscription: Option<gpui::Subscription>,
     update_check_type: UpdateCheckType,
@@ -194,6 +185,60 @@ pub struct AutoUpdater {
 pub struct ReleaseAsset {
     pub version: String,
     pub url: String,
+}
+
+#[derive(Deserialize)]
+struct GitHubRelease {
+    tag_name: String,
+    assets: Vec<GitHubReleaseAsset>,
+}
+
+#[derive(Deserialize)]
+struct GitHubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+fn release_asset_name(os: &str, arch: &str) -> Result<String> {
+    let (platform, extension) = match os {
+        "macos" => ("macOS", "dmg"),
+        "linux" => ("Linux", "tar.gz"),
+        "windows" => ("Windows", "exe"),
+        _ => anyhow::bail!("Updates are unsupported on {os}"),
+    };
+    let architecture = match arch {
+        "aarch64" => "arm64",
+        "x86_64" => "x86_64",
+        _ => anyhow::bail!("Updates are unsupported on {arch}"),
+    };
+    Ok(format!("Zed-Lite-{platform}-{architecture}.{extension}"))
+}
+
+fn select_release_asset(release: GitHubRelease, os: &str, arch: &str) -> Result<ReleaseAsset> {
+    let version = Version::parse(
+        release
+            .tag_name
+            .strip_prefix("zed-lite-v")
+            .or_else(|| release.tag_name.strip_prefix('v'))
+            .unwrap_or(&release.tag_name),
+    )
+    .context("Release tag must be a semantic version")?;
+    let name = release_asset_name(os, arch)?;
+    let asset = release
+        .assets
+        .into_iter()
+        .find(|asset| asset.name == name)
+        .with_context(|| format!("Release {} has no {name} asset", release.tag_name))?;
+    anyhow::ensure!(
+        asset
+            .browser_download_url
+            .starts_with("https://github.com/TianJianJun0727/zed-lite/releases/download/"),
+        "Release asset URL does not belong to this fork",
+    );
+    Ok(ReleaseAsset {
+        version: version.to_string(),
+        url: asset.browser_download_url,
+    })
 }
 
 struct MacOsUnmounter<'a> {
@@ -265,7 +310,7 @@ struct GlobalAutoUpdate(Option<Entity<AutoUpdater>>);
 
 impl Global for GlobalAutoUpdate {}
 
-pub fn init(client: Arc<Client>, cx: &mut App) {
+pub fn init(client: Arc<HttpClientWithUrl>, cx: &mut App) {
     cx.observe_new(|workspace: &mut Workspace, _window, _cx| {
         workspace.register_action(|_, action, window, cx| check(action, window, cx));
 
@@ -279,13 +324,8 @@ pub fn init(client: Arc<Client>, cx: &mut App) {
     let auto_updater = cx.new(|cx| {
         let updater = AutoUpdater::new(version, client, cx);
 
-        let poll_for_updates = ReleaseChannel::try_global(cx)
-            .map(|channel| channel.poll_for_updates())
-            .unwrap_or(false);
-
         if option_env!("ZED_UPDATE_EXPLANATION").is_none()
             && env::var("ZED_UPDATE_EXPLANATION").is_err()
-            && poll_for_updates
         {
             let mut update_subscription = AutoUpdateSetting::get_global(cx)
                 .0
@@ -343,25 +383,8 @@ pub fn check(_: &Check, window: &mut Window, cx: &mut App) {
     }
 }
 
-pub fn release_notes_url(cx: &mut App) -> Option<String> {
-    let release_channel = ReleaseChannel::try_global(cx)?;
-    let url = match release_channel {
-        ReleaseChannel::Stable | ReleaseChannel::Preview => {
-            let auto_updater = AutoUpdater::get(cx)?;
-            let auto_updater = auto_updater.read(cx);
-            let mut current_version = auto_updater.current_version.clone();
-            current_version.pre = semver::Prerelease::EMPTY;
-            current_version.build = semver::BuildMetadata::EMPTY;
-            let release_channel = release_channel.dev_name();
-            let path = format!("/releases/{release_channel}/{current_version}");
-            auto_updater.client.http_client().build_url(&path)
-        }
-        ReleaseChannel::Nightly => {
-            "https://github.com/zed-industries/zed/commits/nightly/".to_string()
-        }
-        ReleaseChannel::Dev => "https://github.com/zed-industries/zed/commits/main/".to_string(),
-    };
-    Some(url)
+pub fn release_notes_url(_cx: &mut App) -> Option<String> {
+    Some(RELEASES_URL.to_string())
 }
 
 pub fn view_release_notes(_: &ViewReleaseNotes, cx: &mut App) -> Option<()> {
@@ -432,7 +455,11 @@ impl AutoUpdater {
         cx.default_global::<GlobalAutoUpdate>().0.clone()
     }
 
-    fn new(current_version: Version, client: Arc<Client>, cx: &mut Context<Self>) -> Self {
+    fn new(
+        current_version: Version,
+        client: Arc<HttpClientWithUrl>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         // On windows, executable files cannot be overwritten while they are
         // running, so we must wait to overwrite the application until quitting
         // or restarting. When quitting the app, we spawn the auto update helper
@@ -594,155 +621,38 @@ impl AutoUpdater {
         true
     }
 
-    // If you are packaging Zed and need to override the place it downloads SSH remotes from,
-    // you can override this function. You should also update get_remote_server_release_url to return
-    // Ok(None).
-    pub async fn download_remote_server_release(
-        release_channel: ReleaseChannel,
-        version: Option<Version>,
-        os: &str,
-        arch: &str,
-        set_status: impl Fn(&str, &mut AsyncApp) + Send + 'static,
-        cx: &mut AsyncApp,
-    ) -> Result<PathBuf> {
-        let this = cx.update(|cx| {
-            cx.default_global::<GlobalAutoUpdate>()
-                .0
-                .clone()
-                .context("auto-update not initialized")
-        })?;
-
-        set_status("Fetching remote server release", cx);
-        let release = Self::get_release_asset(
-            &this,
-            release_channel,
-            version,
-            "zed-remote-server",
-            os,
-            arch,
-            cx,
-        )
-        .await?;
-
-        let servers_dir = paths::remote_servers_dir();
-        let channel_dir = servers_dir.join(release_channel.dev_name());
-        let platform_dir = channel_dir.join(format!("{}-{}", os, arch));
-        let version_path = platform_dir.join(format!("{}.gz", release.version));
-        smol::fs::create_dir_all(&platform_dir).await.ok();
-
-        let client = this.read_with(cx, |this, _| this.client.http_client());
-
-        if smol::fs::metadata(&version_path).await.is_err() {
-            log::info!(
-                "downloading zed-remote-server {os} {arch} version {}",
-                release.version
-            );
-            set_status("Downloading remote server", cx);
-            download_remote_server_binary(&version_path, release, client).await?;
-        }
-
-        if let Err(error) =
-            cleanup_remote_server_cache(&platform_dir, &version_path, REMOTE_SERVER_CACHE_LIMIT)
-                .await
-        {
-            log::warn!(
-                "Failed to clean up remote server cache in {:?}: {error:#}",
-                platform_dir
-            );
-        }
-
-        Ok(version_path)
-    }
-
-    pub async fn get_remote_server_release_url(
-        channel: ReleaseChannel,
-        version: Option<Version>,
-        os: &str,
-        arch: &str,
-        cx: &mut AsyncApp,
-    ) -> Result<Option<String>> {
-        let this = cx.update(|cx| {
-            cx.default_global::<GlobalAutoUpdate>()
-                .0
-                .clone()
-                .context("auto-update not initialized")
-        })?;
-
-        let release =
-            Self::get_release_asset(&this, channel, version, "zed-remote-server", os, arch, cx)
-                .await?;
-
-        Ok(Some(release.url))
-    }
-
     async fn get_release_asset(
         this: &Entity<Self>,
-        release_channel: ReleaseChannel,
-        version: Option<Version>,
-        asset: &str,
         os: &str,
         arch: &str,
         cx: &mut AsyncApp,
-    ) -> Result<ReleaseAsset> {
+    ) -> Result<Option<ReleaseAsset>> {
         let client = this.read_with(cx, |this, _| this.client.clone());
-
-        let (system_id, metrics_id, is_staff) = if client.telemetry().metrics_enabled() {
-            (
-                client.telemetry().system_id(),
-                client.telemetry().metrics_id(),
-                client.telemetry().is_staff(),
-            )
-        } else {
-            (None, None, None)
-        };
-
-        let version = if let Some(mut version) = version {
-            version.pre = semver::Prerelease::EMPTY;
-            version.build = semver::BuildMetadata::EMPTY;
-            version.to_string()
-        } else {
-            "latest".to_string()
-        };
-        let http_client = client.http_client();
-
-        let path = format!("/releases/{}/{}/asset", release_channel.dev_name(), version,);
-        let url = http_client.build_zed_cloud_url_with_query(
-            &path,
-            AssetQuery {
-                os,
-                arch,
-                asset,
-                metrics_id: metrics_id.as_deref(),
-                system_id: system_id.as_deref(),
-                is_staff,
-            },
-        )?;
-
-        let mut response = http_client
-            .get(url.as_str(), Default::default(), true)
-            .await?;
-        let mut body = Vec::new();
-        response.body_mut().read_to_end(&mut body).await?;
-
+        let request = http_client::Request::get(RELEASES_API_URL)
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .body(AsyncBody::empty())?;
+        let mut response = client.send(request).await?;
+        if response.status() == http_client::http::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
         anyhow::ensure!(
             response.status().is_success(),
-            "failed to fetch release: {:?}",
-            String::from_utf8_lossy(&body),
+            "Failed to query fork releases: {}",
+            response.status()
         );
-
-        serde_json::from_slice(body.as_slice()).with_context(|| {
-            format!(
-                "error deserializing release {:?}",
-                String::from_utf8_lossy(&body),
-            )
-        })
+        let mut body = Vec::new();
+        response.body_mut().read_to_end(&mut body).await?;
+        let release: GitHubRelease =
+            serde_json::from_slice(&body).context("Invalid GitHub release response")?;
+        Ok(Some(select_release_asset(release, os, arch)?))
     }
 
     async fn update(this: Entity<Self>, cx: &mut AsyncApp) -> Result<()> {
         let (client, installed_version, previous_status, release_channel) =
             this.read_with(cx, |this, cx| {
                 (
-                    this.client.http_client(),
+                    this.client.clone(),
                     this.current_version.clone(),
                     this.status.clone(),
                     ReleaseChannel::try_global(cx).unwrap_or(ReleaseChannel::Stable),
@@ -757,8 +667,17 @@ impl AutoUpdater {
             cx.notify();
         });
 
-        let fetched_release_data =
-            Self::get_release_asset(&this, release_channel, None, "zed", OS, ARCH, cx).await?;
+        let fetched_release_data = Self::get_release_asset(&this, OS, ARCH, cx).await?;
+        let Some(fetched_release_data) = fetched_release_data else {
+            this.update(cx, |this, cx| {
+                this.status = previous_status;
+                if this.update_check_type.is_manual() {
+                    cx.emit(AutoUpdateEvent::UpToDate);
+                }
+                cx.notify();
+            });
+            return Ok(());
+        };
         let fetched_version = fetched_release_data.clone().version;
         let app_commit_sha = Ok(cx.update(|cx| AppCommitSha::try_global(cx).map(|sha| sha.full())));
         let newer_version = Self::check_if_fetched_version_is_newer(
@@ -997,83 +916,6 @@ impl AutoUpdater {
     }
 }
 
-async fn download_remote_server_binary(
-    target_path: &PathBuf,
-    release: ReleaseAsset,
-    client: Arc<HttpClientWithUrl>,
-) -> Result<()> {
-    let temp = tempfile::Builder::new().tempfile_in(remote_servers_dir())?;
-    let mut temp_file = File::create(&temp).await?;
-
-    let mut response = client.get(&release.url, Default::default(), true).await?;
-    anyhow::ensure!(
-        response.status().is_success(),
-        "failed to download remote server release: {:?}",
-        response.status()
-    );
-    smol::io::copy(response.body_mut(), &mut temp_file).await?;
-    smol::fs::rename(&temp, &target_path).await?;
-
-    Ok(())
-}
-
-async fn cleanup_remote_server_cache(
-    platform_dir: &Path,
-    keep_path: &Path,
-    limit: usize,
-) -> Result<()> {
-    if limit == 0 {
-        return Ok(());
-    }
-
-    let mut entries = smol::fs::read_dir(platform_dir).await?;
-    let now = SystemTime::now();
-    let mut candidates = Vec::new();
-
-    while let Some(entry) = entries.next().await {
-        let entry = entry?;
-        let path = entry.path();
-        if path.extension() != Some(OsStr::new("gz")) {
-            continue;
-        }
-
-        let mtime = if path == keep_path {
-            now
-        } else {
-            smol::fs::metadata(&path)
-                .await
-                .and_then(|metadata| metadata.modified())
-                .unwrap_or(SystemTime::UNIX_EPOCH)
-        };
-
-        candidates.push((path, mtime));
-    }
-
-    if candidates.len() <= limit {
-        return Ok(());
-    }
-
-    candidates.sort_by(|(path_a, time_a), (path_b, time_b)| {
-        time_b.cmp(time_a).then_with(|| path_a.cmp(path_b))
-    });
-
-    for (index, (path, _)) in candidates.into_iter().enumerate() {
-        if index < limit || path == keep_path {
-            continue;
-        }
-
-        if let Err(error) = smol::fs::remove_file(&path).await {
-            log::warn!(
-                "Failed to remove old remote server archive {:?}: {}",
-                path,
-                error
-            );
-        }
-    }
-
-    Ok(())
-}
-
 async fn download_release(
     target_path: &Path,
     release: ReleaseAsset,
@@ -1205,7 +1047,7 @@ async fn install_release_macos(
         .file_name()
         .with_context(|| format!("invalid running app path {running_app_path:?}"))?;
 
-    let mount_path = temp_dir.path().join("Zed");
+    let mount_path = temp_dir.path().join("Zed Lite");
     let mut mounted_app_path: OsString = mount_path.join(running_app_filename).into();
 
     mounted_app_path.push("/");
@@ -1359,10 +1201,83 @@ pub async fn finalize_auto_update_on_quit() {
 
 #[cfg(test)]
 mod tests {
-    use client::Client;
-    use clock::FakeSystemClock;
+    #[gpui::test]
+    async fn test_no_published_release(cx: &mut TestAppContext) {
+        let updater = cx.update(|cx| {
+            let client = FakeHttpClient::create(|request| async move {
+                assert_eq!(request.uri().host(), Some("api.github.com"));
+                assert_eq!(
+                    request.uri().path(),
+                    "/repos/TianJianJun0727/zed-lite/releases/latest"
+                );
+                assert!(request.uri().query().is_none());
+                Ok(Response::builder()
+                    .status(404)
+                    .body(Default::default())
+                    .unwrap())
+            });
+            cx.new(|cx| AutoUpdater::new(Version::new(1, 26, 2), client, cx))
+        });
+        let release =
+            AutoUpdater::get_release_asset(&updater, "macos", "aarch64", &mut cx.to_async())
+                .await
+                .expect("a repository with no releases is valid");
+        assert!(release.is_none());
+    }
+
+    #[test]
+    fn select_release_uses_matching_platform_asset() {
+        let release = serde_json::from_str(r#"{
+            "tag_name": "v1.27.0",
+            "assets": [
+                {"name": "Zed-Lite-macOS-x86_64.dmg", "browser_download_url": "https://github.com/TianJianJun0727/zed-lite/releases/download/v1.27.0/intel.dmg"},
+                {"name": "Zed-Lite-macOS-arm64.dmg", "browser_download_url": "https://github.com/TianJianJun0727/zed-lite/releases/download/v1.27.0/arm.dmg"}
+            ]
+        }"#).unwrap();
+        let asset = super::select_release_asset(release, "macos", "aarch64").unwrap();
+        assert_eq!(asset.version, "1.27.0");
+        assert_eq!(
+            asset.url,
+            "https://github.com/TianJianJun0727/zed-lite/releases/download/v1.27.0/arm.dmg"
+        );
+    }
+
+    #[test]
+    fn select_release_keeps_upstream_version_from_fork_tag() {
+        let release = super::GitHubRelease {
+            tag_name: "zed-lite-v1.26.2".into(),
+            assets: vec![super::GitHubReleaseAsset {
+                name: "Zed-Lite-macOS-arm64.dmg".into(),
+                browser_download_url: "https://github.com/TianJianJun0727/zed-lite/releases/download/zed-lite-v1.26.2/Zed-Lite-macOS-arm64.dmg".into(),
+            }],
+        };
+        let asset = super::select_release_asset(release, "macos", "aarch64").unwrap();
+        assert_eq!(asset.version, "1.26.2");
+    }
+
+    #[test]
+    fn select_release_rejects_missing_platform_asset() {
+        let release = super::GitHubRelease {
+            tag_name: "v1.27.0".into(),
+            assets: vec![],
+        };
+        assert!(super::select_release_asset(release, "macos", "aarch64").is_err());
+    }
+
+    #[test]
+    fn select_release_rejects_another_repository() {
+        let release = super::GitHubRelease {
+            tag_name: "v1.27.0".into(),
+            assets: vec![super::GitHubReleaseAsset {
+                name: "Zed-Lite-macOS-arm64.dmg".into(),
+                browser_download_url:
+                    "https://github.com/zed-industries/zed/releases/download/v1.27.0/Zed.dmg".into(),
+            }],
+        };
+        assert!(super::select_release_asset(release, "macos", "aarch64").is_err());
+    }
     use futures::channel::oneshot;
-    use gpui::TestAppContext;
+    use gpui::{AppContext as _, TestAppContext};
     use http_client::{FakeHttpClient, Response};
     use settings::default_settings;
     use std::{
@@ -1413,24 +1328,23 @@ mod tests {
             let current_version = semver::Version::new(0, 100, 0);
             release_channel::init_test(current_version, ReleaseChannel::Stable, cx);
 
-            let clock = Arc::new(FakeSystemClock::new());
             let release_available = Arc::clone(&release_available);
             let dmg_rx = Arc::new(parking_lot::Mutex::new(Some(dmg_rx)));
             let fake_client_http = FakeHttpClient::create(move |req| {
                 let release_available = release_available.load(atomic::Ordering::Relaxed);
                 let dmg_rx = dmg_rx.clone();
                 async move {
-                if req.uri().path() == "/releases/stable/latest/asset" {
+                if req.uri().path() == "/repos/TianJianJun0727/zed-lite/releases/latest" {
                     if release_available {
                         return Ok(Response::builder().status(200).body(
-                            r#"{"version":"0.100.1","url":"https://test.example/new-download"}"#.into()
+                            serde_json::json!({"tag_name":"v0.100.1","assets":[{"name":release_asset_name(OS, ARCH).unwrap(),"browser_download_url":"https://github.com/TianJianJun0727/zed-lite/releases/download/v0.100.1/new-download"}]}).to_string().into()
                         ).unwrap());
                     } else {
                         return Ok(Response::builder().status(200).body(
-                            r#"{"version":"0.100.0","url":"https://test.example/old-download"}"#.into()
+                            serde_json::json!({"tag_name":"v0.100.0","assets":[{"name":release_asset_name(OS, ARCH).unwrap(),"browser_download_url":"https://github.com/TianJianJun0727/zed-lite/releases/download/v0.100.0/old-download"}]}).to_string().into()
                         ).unwrap());
                     }
-                } else if req.uri().path() == "/new-download" {
+                } else if req.uri().path().ends_with("/new-download") {
                     return Ok(Response::builder().status(200).body({
                         let dmg_rx = dmg_rx.lock().take().unwrap();
                         dmg_rx.await.unwrap().into()
@@ -1439,7 +1353,7 @@ mod tests {
                 Ok(Response::builder().status(404).body("".into()).unwrap())
                 }
             });
-            let client = Client::new(clock, fake_client_http, cx);
+            let client = fake_client_http;
             crate::init(client, cx);
         });
 

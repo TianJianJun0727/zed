@@ -10,11 +10,10 @@ use crate::{
     BUFFER_HEADER_PADDING, BlockId, ChunkRendererContext, ChunkReplacement, CodeActionSource,
     ConflictsOurs, ConflictsOursMarker, ConflictsOuter, ConflictsTheirs, ConflictsTheirsMarker,
     ContextMenuPlacement, CursorShape, CustomBlockId, DisplayDiffHunk, DisplayPoint, DisplayRow,
-    EditDisplayMode, EditPrediction, Editor, EditorMode, EditorSettings, EditorSnapshot,
-    EditorStyle, FILE_HEADER_HEIGHT, FocusedBlock, GutterDimensions, HalfPageDown, HalfPageUp,
-    HandleInput, HoveredCursor, InlayHintRefreshReason, LineDown, LineHighlight, LineUp,
-    MAX_LINE_LEN, MINIMAP_FONT_SIZE, PageDown, PageUp, Point, RowExt, RowRangeExt, Selection,
-    SelectionDragState, SizingBehavior, SoftWrap, ToPoint,
+    Editor, EditorMode, EditorSettings, EditorSnapshot, EditorStyle, FILE_HEADER_HEIGHT,
+    FocusedBlock, GutterDimensions, HalfPageDown, HalfPageUp, HandleInput, InlayHintRefreshReason,
+    LineDown, LineHighlight, LineUp, MAX_LINE_LEN, MINIMAP_FONT_SIZE, PageDown, PageUp, Point,
+    RowExt, RowRangeExt, Selection, SelectionDragState, SizingBehavior, SoftWrap, ToPoint,
     code_context_menus::{CodeActionsMenu, MENU_ASIDE_MAX_WIDTH, MENU_ASIDE_MIN_WIDTH, MENU_GAP},
     column_pixels,
     cursor_animation::{CursorViewport, LogicalCursorPosition, animated_corners_overlap_target},
@@ -39,7 +38,6 @@ use crate::{
 };
 use buffer_diff::{DiffHunkStatus, DiffHunkStatusKind};
 use collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use feature_flags::{DiffReviewFeatureFlag, FeatureFlagAppExt as _};
 use git::{Oid, blame::BlameEntry, commit::ParsedCommitMessage};
 use gpui::{
     Action, Along, AnyElement, App, AppContext, AvailableSpace, Axis as ScrollbarAxis, BorderStyle,
@@ -79,7 +77,7 @@ use std::{
     cmp::{self, Ordering},
     fmt::{self, Write},
     iter, mem,
-    ops::{Deref, Range},
+    ops::Range,
     rc::Rc,
     sync::Arc,
     time::{Duration, Instant},
@@ -93,7 +91,7 @@ use ui::{ButtonLike, POPOVER_Y_PADDING, Tooltip, prelude::*, scrollbars::ShowScr
 use unicode_segmentation::UnicodeSegmentation;
 use util::{ResultExt, debug_panic};
 use workspace::{
-    CollaboratorId, ItemHandle, Workspace,
+    ItemHandle, Workspace,
     item::{Item, ItemBufferKind},
 };
 
@@ -608,7 +606,6 @@ impl EditorElement {
         register_action(editor, window, Editor::toggle_relative_line_numbers);
         register_action(editor, window, Editor::toggle_indent_guides);
         register_action(editor, window, Editor::toggle_inline_values);
-        register_action(editor, window, Editor::toggle_edit_predictions);
         if editor.read(cx).lsp_data_enabled() {
             register_action(editor, window, Editor::toggle_inlay_hints);
             if editor.read(cx).can_accept_inlay_hint(cx) {
@@ -656,12 +653,6 @@ impl EditorElement {
         register_action(editor, window, Editor::expand_all_diff_hunks);
         register_action(editor, window, Editor::collapse_all_diff_hunks);
         register_action(editor, window, Editor::toggle_all_diff_hunks);
-        register_action(editor, window, Editor::toggle_review_comments_expanded);
-        register_action(editor, window, Editor::submit_diff_review_comment_action);
-        register_action(editor, window, Editor::edit_review_comment);
-        register_action(editor, window, Editor::delete_review_comment);
-        register_action(editor, window, Editor::confirm_edit_review_comment_action);
-        register_action(editor, window, Editor::cancel_edit_review_comment_action);
         register_action(editor, window, Editor::go_to_previous_change);
         register_action(editor, window, Editor::go_to_next_change);
         register_action(editor, window, Editor::go_to_prev_reference);
@@ -688,12 +679,10 @@ impl EditorElement {
         register_action(editor, window, Editor::show_signature_help);
         register_action(editor, window, Editor::signature_help_prev);
         register_action(editor, window, Editor::signature_help_next);
-        register_action(editor, window, Editor::show_edit_prediction);
         register_action(editor, window, Editor::context_menu_first);
         register_action(editor, window, Editor::context_menu_prev);
         register_action(editor, window, Editor::context_menu_next);
         register_action(editor, window, Editor::context_menu_last);
-        register_action(editor, window, Editor::display_cursor_names);
         register_action(editor, window, Editor::open_active_item_in_terminal);
         register_action(editor, window, Editor::spawn_nearest_task);
         register_action(editor, window, Editor::open_selections_in_multibuffer);
@@ -773,9 +762,6 @@ impl EditorElement {
             register_action(editor, window, Editor::toggle_block_comments);
             register_action(editor, window, Editor::toggle_markdown_block_quote);
             register_action(editor, window, Editor::unwrap_syntax_node);
-            register_action(editor, window, Editor::accept_next_word_edit_prediction);
-            register_action(editor, window, Editor::accept_next_line_edit_prediction);
-            register_action(editor, window, Editor::accept_edit_prediction);
             register_action(editor, window, Editor::restore_file);
             register_action(editor, window, Editor::git_restore);
             register_action(editor, window, Editor::restore_and_next);
@@ -941,7 +927,7 @@ impl EditorElement {
                         editor.cursor_shape,
                         &snapshot.display_snapshot,
                         is_newest,
-                        editor.leader_id.is_none(),
+                        true,
                         None,
                     );
                     if is_newest {
@@ -996,69 +982,7 @@ impl EditorElement {
                 }
             }
 
-            if let Some(collaboration_hub) = &editor.collaboration_hub {
-                // When following someone, render the local selections in their color.
-                if let Some(leader_id) = editor.leader_id {
-                    match leader_id {
-                        CollaboratorId::PeerId(peer_id) => {
-                            if let Some(collaborator) =
-                                collaboration_hub.collaborators(cx).get(&peer_id)
-                                && let Some(participant_index) = collaboration_hub
-                                    .user_participant_indices(cx)
-                                    .get(&collaborator.user_id)
-                                && let Some((local_selection_style, _)) = selections.first_mut()
-                            {
-                                *local_selection_style = cx
-                                    .theme()
-                                    .players()
-                                    .color_for_participant(participant_index.0);
-                            }
-                        }
-                        CollaboratorId::Agent => {
-                            if let Some((local_selection_style, _)) = selections.first_mut() {
-                                *local_selection_style = cx.theme().players().agent();
-                            }
-                        }
-                    }
-                }
-
-                let mut remote_selections = HashMap::default();
-                for selection in snapshot.remote_selections_in_range(
-                    &(start_anchor..end_anchor),
-                    collaboration_hub.as_ref(),
-                    cx,
-                ) {
-                    // Don't re-render the leader's selections, since the local selections
-                    // match theirs.
-                    if Some(selection.collaborator_id) == editor.leader_id {
-                        continue;
-                    }
-                    let key = HoveredCursor {
-                        replica_id: selection.replica_id,
-                        selection_id: selection.selection.id,
-                    };
-
-                    let is_shown =
-                        editor.show_cursor_names || editor.hovered_cursors.contains_key(&key);
-
-                    remote_selections
-                        .entry(selection.replica_id)
-                        .or_insert((selection.color, Vec::new()))
-                        .1
-                        .push(SelectionLayout::new(
-                            selection.selection,
-                            selection.line_mode,
-                            editor.cursor_offset_on_selection,
-                            selection.cursor_shape,
-                            &snapshot.display_snapshot,
-                            false,
-                            false,
-                            if is_shown { selection.user_name } else { None },
-                        ));
-                }
-
-                selections.extend(remote_selections.into_values());
-            } else if !editor.is_focused(window) && editor.show_cursor_when_unfocused {
+            if !editor.is_focused(window) && editor.show_cursor_when_unfocused {
                 let cursor_offset_on_selection = editor.cursor_offset_on_selection;
 
                 let layouts = snapshot
@@ -1100,39 +1024,19 @@ impl EditorElement {
     ) -> Vec<(DisplayPoint, Hsla)> {
         let editor = self.editor.read(cx);
         let mut cursors = Vec::new();
-        let mut skip_local = false;
         let mut add_cursor = |anchor: Anchor, color| {
             cursors.push((anchor.to_display_point(&snapshot.display_snapshot), color));
         };
-        // Remote cursors
-        if let Some(collaboration_hub) = &editor.collaboration_hub {
-            for remote_selection in snapshot.remote_selections_in_range(
-                &(Anchor::Min..Anchor::Max),
-                collaboration_hub.deref(),
-                cx,
-            ) {
-                add_cursor(
-                    remote_selection.selection.head(),
-                    remote_selection.color.cursor,
-                );
-                if Some(remote_selection.collaborator_id) == editor.leader_id {
-                    skip_local = true;
-                }
-            }
-        }
-        // Local cursors
-        if !skip_local {
-            let color = cx.theme().players().local().cursor;
-            editor
-                .selections
-                .disjoint_anchors()
-                .iter()
-                .for_each(|selection| {
-                    add_cursor(selection.head(), color);
-                });
-            if let Some(ref selection) = editor.selections.pending_anchor() {
+        let color = cx.theme().players().local().cursor;
+        editor
+            .selections
+            .disjoint_anchors()
+            .iter()
+            .for_each(|selection| {
                 add_cursor(selection.head(), color);
-            }
+            });
+        if let Some(ref selection) = editor.selections.pending_anchor() {
+            add_cursor(selection.head(), color);
         }
         cursors
     }
@@ -1180,13 +1084,12 @@ impl EditorElement {
             });
 
             if animation_enabled {
-                let newest_animation_selection_id = if editor.leader_id.is_none()
-                    && cursor_shape_supports_cursor_animation(editor.cursor_shape)
-                {
-                    Some(editor.selections.newest_anchor().id)
-                } else {
-                    None
-                };
+                let newest_animation_selection_id =
+                    if cursor_shape_supports_cursor_animation(editor.cursor_shape) {
+                        Some(editor.selections.newest_anchor().id)
+                    } else {
+                        None
+                    };
 
                 editor
                     .cursor_animations
@@ -1906,7 +1809,6 @@ impl EditorElement {
         content_origin: gpui::Point<Pixels>,
         scroll_position: gpui::Point<ScrollOffset>,
         scroll_pixel_position: gpui::Point<ScrollPixelOffset>,
-        edit_prediction_popover_origin: Option<gpui::Point<Pixels>>,
         start_row: DisplayRow,
         end_row: DisplayRow,
         line_height: Pixels,
@@ -2025,24 +1927,12 @@ impl EditorElement {
                 cmp::max(padded_line, min_start)
             };
 
-            let behind_edit_prediction_popover = edit_prediction_popover_origin
-                .as_ref()
-                .is_some_and(|edit_prediction_popover_origin| {
-                    (pos_y..pos_y + line_height).contains(&edit_prediction_popover_origin.y)
-                });
-            let opacity = if behind_edit_prediction_popover {
-                0.5
-            } else {
-                1.0
-            };
-
             let mut element = h_flex()
                 .id(("diagnostic", row.0))
                 .h(line_height)
                 .w_full()
                 .px_1()
                 .rounded_xs()
-                .opacity(opacity)
                 .bg(severity_to_color(&diagnostic_to_render.severity)
                     .color(cx)
                     .opacity(0.05))
@@ -2152,22 +2042,7 @@ impl EditorElement {
 
         let editor = self.editor.read(cx);
         let blame = editor.blame.clone()?;
-        let padding = {
-            const INLINE_ACCEPT_SUGGESTION_EM_WIDTHS: f32 = 14.;
-
-            let mut padding = ProjectSettings::get_global(cx).git.inline_blame.padding as f32;
-
-            if let Some(edit_prediction) = editor.active_edit_prediction.as_ref()
-                && let EditPrediction::Edit {
-                    display_mode: EditDisplayMode::TabAccept,
-                    ..
-                } = &edit_prediction.completion
-            {
-                padding += INLINE_ACCEPT_SUGGESTION_EM_WIDTHS
-            }
-
-            padding * em_width
-        };
+        let padding = ProjectSettings::get_global(cx).git.inline_blame.padding as f32 * em_width;
 
         let (buffer_id, entry) = blame
             .update(cx, |blame, cx| {
@@ -2653,49 +2528,6 @@ impl EditorElement {
                 })
                 .collect_vec()
         })
-    }
-
-    fn should_render_diff_review_button(
-        &self,
-        range: Range<DisplayRow>,
-        row_infos: &[RowInfo],
-        snapshot: &EditorSnapshot,
-        cx: &App,
-    ) -> Option<(DisplayRow, Option<u32>)> {
-        if !cx.has_flag::<DiffReviewFeatureFlag>() {
-            return None;
-        }
-
-        let show_diff_review_button = self.editor.read(cx).show_diff_review_button();
-        if !show_diff_review_button {
-            return None;
-        }
-
-        let indicator = self.editor.read(cx).gutter_diff_review_indicator.0?;
-        if !indicator.is_active {
-            return None;
-        }
-
-        let display_row = indicator
-            .start
-            .to_display_point(&snapshot.display_snapshot)
-            .row();
-        let row_index = (display_row.0.saturating_sub(range.start.0)) as usize;
-
-        let row_info = row_infos.get(row_index);
-        if row_info.is_some_and(|row_info| row_info.expand_info.is_some()) {
-            return None;
-        }
-
-        let buffer_id = row_info.and_then(|info| info.buffer_id)?;
-
-        let editor = self.editor.read(cx);
-        if editor.is_buffer_folded(buffer_id, cx) {
-            return None;
-        }
-
-        let buffer_row = row_info.and_then(|info| info.buffer_row);
-        Some((display_row, buffer_row))
     }
 
     fn layout_run_indicators(
@@ -3918,28 +3750,18 @@ impl EditorElement {
         scroll_pixel_position: gpui::Point<ScrollPixelOffset>,
         line_layouts: &[LineWithInvisibles],
         cursor: DisplayPoint,
-        cursor_point: Point,
-        style: &EditorStyle,
         window: &mut Window,
         cx: &mut App,
     ) -> Option<ContextMenuLayout> {
         let mut min_menu_height = Pixels::ZERO;
         let mut max_menu_height = Pixels::ZERO;
-        let mut height_above_menu = Pixels::ZERO;
+        let height_above_menu = Pixels::ZERO;
         let height_below_menu = Pixels::ZERO;
-        let mut edit_prediction_popover_visible = false;
         let mut context_menu_visible = false;
         let context_menu_placement;
 
         {
             let editor = self.editor.read(cx);
-            if editor.edit_prediction_visible_in_cursor_popover(editor.has_active_edit_prediction())
-            {
-                height_above_menu +=
-                    editor.edit_prediction_cursor_popover_height() + POPOVER_Y_PADDING;
-                edit_prediction_popover_visible = true;
-            }
-
             if editor.context_menu_visible()
                 && let Some(crate::ContextMenuOrigin::Cursor) = editor.context_menu_origin()
             {
@@ -3960,8 +3782,7 @@ impl EditorElement {
                 .and_then(|options| options.placement.clone());
         }
 
-        let visible = edit_prediction_popover_visible || context_menu_visible;
-        if !visible {
+        if !context_menu_visible {
             return None;
         }
 
@@ -4003,7 +3824,7 @@ impl EditorElement {
             viewport_bounds,
             window,
             cx,
-            |height, max_width_for_stable_x, y_flipped, window, cx| {
+            |height, _, y_flipped, window, cx| {
                 // First layout the menu to get its size - others can be at least this wide.
                 let context_menu = if context_menu_visible {
                     let menu_height = if y_flipped {
@@ -4019,35 +3840,7 @@ impl EditorElement {
                 } else {
                     None
                 };
-                let min_width = context_menu
-                    .as_ref()
-                    .map_or(px(0.), |(_, _, size)| size.width);
-                let max_width = max_width_for_stable_x.max(
-                    context_menu
-                        .as_ref()
-                        .map_or(px(0.), |(_, _, size)| size.width),
-                );
-
-                let edit_prediction = if edit_prediction_popover_visible {
-                    self.editor.update(cx, move |editor, cx| {
-                        let mut element = editor.render_edit_prediction_cursor_popover(
-                            min_width,
-                            max_width,
-                            cursor_point,
-                            style,
-                            window,
-                            cx,
-                        )?;
-                        let size = element.layout_as_root(AvailableSpace::min_size(), window, cx);
-                        Some((CursorPopoverType::EditPrediction, element, size))
-                    })
-                } else {
-                    None
-                };
-                [edit_prediction, context_menu]
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
+                context_menu.into_iter().collect::<Vec<_>>()
             },
         )?;
 
@@ -5643,10 +5436,6 @@ impl EditorElement {
             for test_indicator in layout.test_indicators.iter_mut() {
                 test_indicator.paint(window, cx);
             }
-
-            if let Some(diff_review_button) = layout.diff_review_button.as_mut() {
-                diff_review_button.paint(window, cx);
-            }
         });
     }
 
@@ -6926,17 +6715,6 @@ impl EditorElement {
                     block.element.paint(window, cx);
                 })
             }
-        }
-    }
-
-    fn paint_edit_prediction_popover(
-        &mut self,
-        layout: &mut EditorLayout,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        if let Some(edit_prediction_popover) = layout.edit_prediction_popover.as_mut() {
-            edit_prediction_popover.paint(window, cx);
         }
     }
 
@@ -8857,8 +8635,6 @@ impl Element for EditorElement {
                         hollow_background: colors.editor_diff_hunk_deleted_hollow_background,
                         hollow_border: colors.editor_diff_hunk_deleted_hollow_border,
                     };
-                    let drag_highlight_color = colors.editor_active_line_background;
-                    let drag_border_color = colors.border_focused;
 
                     for (ix, row_info) in row_infos.iter().enumerate() {
                         let Some(diff_status) = row_info.diff_status else {
@@ -8900,24 +8676,6 @@ impl Element for EditorElement {
                         highlighted_rows
                             .entry(base_display_point.row())
                             .or_insert(background);
-                    }
-
-                    // Add diff review drag selection highlight to text area
-                    if let Some(drag_state) = &self.editor.read(cx).diff_review_drag_state {
-                        let range = drag_state.row_range(&snapshot.display_snapshot);
-                        let start_row = range.start().0;
-                        let end_row = range.end().0;
-                        let drag_highlight = LineHighlight {
-                            background: solid_background(drag_highlight_color),
-                            border: Some(drag_border_color),
-                            include_gutter: true,
-                            type_id: None,
-                        };
-                        for row_num in start_row..=end_row {
-                            highlighted_rows
-                                .entry(DisplayRow(row_num))
-                                .or_insert(drag_highlight);
-                        }
                     }
 
                     let highlighted_gutter_ranges =
@@ -9458,30 +9216,6 @@ impl Element for EditorElement {
                             )
                         });
 
-                    let (edit_prediction_popover, edit_prediction_popover_origin) = self
-                        .editor
-                        .update(cx, |editor, cx| {
-                            editor.render_edit_prediction_popover(
-                                &text_hitbox.bounds,
-                                content_origin,
-                                right_margin,
-                                &snapshot,
-                                start_row..end_row,
-                                scroll_position.y,
-                                scroll_position.y + height_in_lines,
-                                &line_layouts,
-                                line_height,
-                                scroll_position,
-                                scroll_pixel_position,
-                                newest_selection_head,
-                                editor_width,
-                                style,
-                                window,
-                                cx,
-                            )
-                        })
-                        .unzip();
-
                     let mut inline_diagnostics = self.layout_inline_diagnostics(
                         &line_layouts,
                         &crease_trailers,
@@ -9489,7 +9223,6 @@ impl Element for EditorElement {
                         content_origin,
                         scroll_position,
                         scroll_pixel_position,
-                        edit_prediction_popover_origin,
                         start_row,
                         end_row,
                         line_height,
@@ -9682,8 +9415,6 @@ impl Element for EditorElement {
 
                     let context_menu_layout =
                         if let Some(newest_selection_head) = newest_selection_head {
-                            let newest_selection_point =
-                                newest_selection_head.to_point(&snapshot.display_snapshot);
                             if (start_row..end_row).contains(&newest_selection_head.row()) {
                                 self.layout_cursor_popovers(
                                     line_height,
@@ -9694,8 +9425,6 @@ impl Element for EditorElement {
                                     scroll_pixel_position,
                                     &line_layouts,
                                     newest_selection_head,
-                                    newest_selection_point,
-                                    style,
                                     window,
                                     cx,
                                 )
@@ -9776,52 +9505,6 @@ impl Element for EditorElement {
                             self.layout_gutter_hover_button(&gutter, position, row, window, cx),
                         );
                     }
-
-                    let git_gutter_width = Self::gutter_strip_width(line_height, cx)
-                        + gutter_dimensions
-                            .git_blame_entries_width
-                            .unwrap_or_default();
-                    let available_width = gutter_dimensions.left_padding - git_gutter_width;
-
-                    let max_line_number_length = self
-                        .editor
-                        .read(cx)
-                        .buffer()
-                        .read(cx)
-                        .snapshot(cx)
-                        .widest_line_number()
-                        .ilog10()
-                        + 1;
-
-                    let diff_review_button = self
-                        .should_render_diff_review_button(
-                            start_row..end_row,
-                            &row_infos,
-                            &snapshot,
-                            cx,
-                        )
-                        .map(|(display_row, buffer_row)| {
-                            let is_wide = max_line_number_length
-                                >= EditorSettings::get_global(cx).gutter.min_line_number_digits
-                                    as u32
-                                && buffer_row.is_some_and(|row| {
-                                    (row + 1).ilog10() + 1 == max_line_number_length
-                                })
-                                || gutter_dimensions.right_padding == px(0.);
-
-                            let button_width = if is_wide {
-                                available_width - px(6.)
-                            } else {
-                                available_width + em_width - px(6.)
-                            };
-
-                            let button = self.editor.update(cx, |editor, cx| {
-                                editor
-                                    .render_diff_review_button(display_row, button_width, cx)
-                                    .into_any_element()
-                            });
-                            gutter.prepaint_button(button, display_row, window, cx)
-                        });
 
                     self.layout_signature_help(
                         &hitbox,
@@ -10068,13 +9751,11 @@ impl Element for EditorElement {
                         visible_cursors,
                         navigation_overlay_paint_commands,
                         selections,
-                        edit_prediction_popover,
                         diff_hunk_controls,
                         mouse_context_menu,
                         test_indicators,
                         bookmarks,
                         breakpoints,
-                        diff_review_button,
                         crease_toggles,
                         crease_trailers,
                         tab_invisible,
@@ -10188,7 +9869,6 @@ impl Element for EditorElement {
                     self.paint_sticky_headers(layout, window, cx);
                     self.paint_minimap(layout, window, cx);
                     self.paint_scrollbars(layout, window, cx);
-                    self.paint_edit_prediction_popover(layout, window, cx);
                     self.paint_mouse_context_menu(layout, window, cx);
                 });
             })
@@ -10291,12 +9971,10 @@ pub struct EditorLayout {
     test_indicators: Vec<AnyElement>,
     bookmarks: Vec<AnyElement>,
     breakpoints: Vec<AnyElement>,
-    diff_review_button: Option<AnyElement>,
     crease_toggles: Vec<Option<AnyElement>>,
     expand_toggles: Vec<Option<(AnyElement, gpui::Point<Pixels>)>>,
     diff_hunk_controls: Vec<AnyElement>,
     crease_trailers: Vec<Option<CreaseTrailerLayout>>,
-    edit_prediction_popover: Option<AnyElement>,
     mouse_context_menu: Option<AnyElement>,
     tab_invisible: ShapedLine,
     space_invisible: ShapedLine,
@@ -11336,7 +11014,6 @@ impl HighlightedRange {
 
 enum CursorPopoverType {
     CodeContextMenu,
-    EditPrediction,
 }
 
 pub fn register_action<T: Action>(

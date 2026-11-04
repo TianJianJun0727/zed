@@ -1,38 +1,105 @@
-name: Local editor macOS
+name: Zed Lite macOS
 
 on:
   push:
-    branches: [feature/local-editor-i18n]
+    branches: [main, feature/local-editor-i18n]
   workflow_dispatch:
+    inputs:
+      package_from_run:
+        description: Successful native macOS run to repackage (leave empty for a full build)
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
   group: local-editor-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  localization:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      package_source_sha: ${{ steps.package-source.outputs.source_sha }}
+      package_source_run: ${{ steps.package-source.outputs.run_id }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Select validated package source
+        if: ${{ inputs.package_from_run }}
+        id: package-source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.package_from_run }}
+        run: python3 script/check-macos-package-source.py --repository "$GITHUB_REPOSITORY" --run-id "$SOURCE_RUN_ID" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: locale-cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: localization-linux-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'crates/zed_i18n/**') }}
+          restore-keys: |
+            localization-linux-
+      - name: Locale resources
+        run: python3 script/check-locales.py
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Localization tests
+        run: cargo test --locked -p zed_i18n
+      - name: CI policy tests
+        run: python3 -m unittest discover -s script/tests
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: success() && steps.locale-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.locale-cache.outputs.cache-primary-key }}
   build:
+    needs: localization
+    permissions:
+      contents: read
+      actions: read
     runs-on: macos-26
-    timeout-minutes: 180
+    timeout-minutes: 300
     env:
+      CARGO_INSTALL_ROOT: ${{ github.workspace }}/target/ci-tools
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: '0'
       CARGO_BUILD_JOBS: '3'
       CARGO_PROFILE_RELEASE_LTO: 'false'
       CARGO_PROFILE_RELEASE_DEBUG: '0'
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
-      ZED_RELEASE_CHANNEL: dev
+      ZED_RELEASE_CHANNEL: stable
+      ZED_BUNDLE: 'true'
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - name: Toolchain
+        if: ${{ !inputs.package_from_run }}
         run: |
           xcodebuild -version
           xcrun --sdk macosx --show-sdk-version
           rustup show
+          echo "$CARGO_INSTALL_ROOT/bin" >> "$GITHUB_PATH"
           command -v cmake || brew install cmake
+      - name: Verify upstream stable version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ZED_UPSTREAM_VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("crates/zed/Cargo.toml", "rb"))["package"]["version"])')"
+          UPSTREAM_STABLE_TAG="$(gh api "repos/zed-industries/zed/releases/tags/v$ZED_UPSTREAM_VERSION" --jq 'if .prerelease or .draft then error("A stable release is required") else .tag_name end')"
+          test "$UPSTREAM_STABLE_TAG" = "v$ZED_UPSTREAM_VERSION"
+          test "$(cat crates/zed/RELEASE_CHANNEL)" = stable
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: ${{ !inputs.package_from_run }}
         id: cache
         with:
           path: |
@@ -43,34 +110,194 @@ jobs:
           restore-keys: |
             macos-26-${{ hashFiles('rust-toolchain.toml') }}-${{ hashFiles('Cargo.lock') }}-
             macos-26-${{ hashFiles('rust-toolchain.toml') }}-
-      - name: Locale resources
-        run: python3 script/check-locales.py
-      - name: Format
-        run: cargo fmt --all -- --check
-      - name: Localization tests
-        run: cargo test --locked -p zed_i18n
       - name: Check application types
-        run: cargo check --locked --release -p zed --bin zed -p cli
-      - name: Build application and CLI
-        run: cargo build --locked --release -p zed --bin zed -p cli
-      - name: Bundle unsigned development app
+        if: ${{ !inputs.package_from_run }}
         run: |
-          cargo install cargo-bundle --git https://github.com/zed-industries/cargo-bundle.git --branch zed-deploy --locked
-          python3 - <<'PY'
+          set -o pipefail
+          mkdir -p target
+          cargo check --locked --release -p zed --bin zed-lite -p cli --bin cli --message-format=json | tee target/local-editor-check.json | python3 -u -c '
+          import json, sys
+          for line in sys.stdin:
+              item = json.loads(line)
+              if item.get("reason") == "compiler-message":
+                  print(item["message"].get("rendered", ""), end="", flush=True)
+          '
+      - name: Save compiler diagnostics
+        if: ${{ !inputs.package_from_run && (always()) }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: compiler-diagnostics
+          path: target/local-editor-check.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Dependency licenses
+        if: ${{ !inputs.package_from_run }}
+        run: script/generate-licenses
+      - name: Build application and CLI
+        if: ${{ !inputs.package_from_run }}
+        run: cargo build --locked --release -p zed --bin zed-lite -p cli --bin cli
+      - name: Localization coverage and schema contracts
+        if: ${{ !inputs.package_from_run }}
+        run: |
+          target/release/zed-lite --dump-all-actions > target/localization-contracts.json
+          python3 script/check-locales.py --actions target/localization-contracts.json
+      - name: Save localization diagnostics
+        if: ${{ !inputs.package_from_run && (always()) }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: localization-contracts
+          path: target/localization-contracts.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Configure regression test compilation
+        if: ${{ !inputs.package_from_run }}
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 > target/local-editor-workspace.json
+          python3 - <<'PYTHON'
+          import json
+          from pathlib import Path
+          metadata = json.loads(Path("target/local-editor-workspace.json").read_text())
+          members = set(metadata["workspace_members"])
+          packages = sorted(
+              package["name"] for package in metadata["packages"]
+              if package["id"] in members
+              and not any("proc-macro" in target["kind"] for target in package["targets"])
+          )
+          profile = "".join(
+              f"[profile.release.package.{json.dumps(name)}]\nopt-level = 1\n"
+              for name in packages
+          )
+          Path("target/local-editor-test-profile.toml").write_text(profile)
+          print(f"Configured regression compilation for {len(packages)} workspace packages")
+          PYTHON
+      - name: Check test targets
+        if: ${{ !inputs.package_from_run }}
+        id: test-targets
+        run: |
+          cargo check --locked --release --config target/local-editor-test-profile.toml -p zed --bin zed-lite --tests
+          cargo check --locked --release --config target/local-editor-test-profile.toml -p workspace --tests
+          cargo check --locked --release --config target/local-editor-test-profile.toml -p project --features test-support --test integration
+          cargo check --locked --release --config target/local-editor-test-profile.toml -p migrator -p auto_update --tests
+      - name: Local editor UI contracts
+        if: ${{ !inputs.package_from_run }}
+        run: |
+          test_status=0
+          for test_filter in test_local_editor_ test_action_namespaces test_parse_focus_app_url test_new_window_launchpad_opens_without_items test_ssh_urls_do_not_open_projects test_multi_workspace_session_restore test_quit_preserves_focused_workspace_for_restore test_restored_project_groups_survive_workspace_key_change; do
+            cargo test --locked --release --config target/local-editor-test-profile.toml -p zed --bin zed-lite "$test_filter" || test_status=1
+          done
+          for test_filter in test_render_window_title_format test_move_active_project_group_actions test_open_project_closes_empty_workspace_but_not_non_empty_ones; do
+            cargo test --locked --release --config target/local-editor-test-profile.toml -p workspace "$test_filter" || test_status=1
+          done
+          exit "$test_status"
+      - name: Local project regression tests
+        if: ${{ !inputs.package_from_run && (!cancelled() && steps.test-targets.outcome == 'success') }}
+        run: |
+          test_status=0
+          for test_filter in test_rescan_updates_local_buffers test_definition test_completions_with_text_edit test_search; do
+            cargo test --locked --release --config target/local-editor-test-profile.toml -p project --features test-support --test integration "$test_filter" || test_status=1
+          done
+          exit "$test_status"
+      - name: Settings migration tests
+        if: ${{ !inputs.package_from_run && (!cancelled() && steps.test-targets.outcome == 'success') }}
+        run: cargo test --locked --release --config target/local-editor-test-profile.toml -p migrator
+      - name: Updater contract tests
+        if: ${{ !inputs.package_from_run && (!cancelled() && steps.test-targets.outcome == 'success') }}
+        run: |
+          test_status=0
+          for test_filter in select_release test_no_published_release; do
+            cargo test --locked --release --config target/local-editor-test-profile.toml -p auto_update "$test_filter" || test_status=1
+          done
+          exit "$test_status"
+      - name: Restore validated application bundle
+        if: ${{ inputs.package_from_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ needs.localization.outputs.package_source_run }}
+        run: |
+          mkdir -p target/package-input target/release/bundle/osx
+          gh run download "$SOURCE_RUN_ID" -R "$GITHUB_REPOSITORY" -n Zed-Lite-macOS-arm64 -D target/package-input
+          source_mount="$(mktemp -d)"
+          hdiutil attach -readonly -nobrowse -mountpoint "$source_mount" target/package-input/Zed-Lite-macOS-arm64.dmg
+          trap 'hdiutil detach "$source_mount"; rmdir "$source_mount"' EXIT
+          ditto "$source_mount/Zed Lite.app" 'target/release/bundle/osx/Zed Lite.app'
+          hdiutil detach "$source_mount"
+          rmdir "$source_mount"
+          trap - EXIT
+      - name: Bundle application
+        if: ${{ !inputs.package_from_run }}
+        run: |
+          cargo install cargo-bundle --git https://github.com/zed-industries/cargo-bundle.git --rev 2be2669972dff3ddd4daf89a2cb29d2d06cad7c7 --locked
+          cp crates/zed/Cargo.toml target/zed.Cargo.toml
+          trap 'mv target/zed.Cargo.toml crates/zed/Cargo.toml' EXIT
+          python3 - <<'PYTHON'
           from pathlib import Path
           manifest = Path('crates/zed/Cargo.toml')
-          manifest.write_text(manifest.read_text().replace('[package.metadata.bundle-dev]', '[package.metadata.bundle]'))
-          PY
-          cargo bundle --release --package zed --bin zed --format osx
-          APP='target/release/bundle/osx/Zed Dev.app'
+          manifest.write_text(manifest.read_text().replace('[package.metadata.bundle-stable]', '[package.metadata.bundle]'))
+          PYTHON
+          (cd crates/zed && CARGO_BUNDLE_SKIP_BUILD=true cargo bundle --release --format osx --select-workspace-root)
+          mv target/zed.Cargo.toml crates/zed/Cargo.toml
+          trap - EXIT
+          APP='target/release/bundle/osx/Zed Lite.app'
           cp target/release/cli "$APP/Contents/MacOS/cli"
           cp crates/zed/resources/Document.icns "$APP/Contents/Resources/Document.icns"
-          codesign --force --deep --sign - "$APP"
-          ditto -c -k --sequesterRsrc --keepParent "$APP" target/Zed-Local-macOS-arm64.zip
+      - name: Package DMG
+        run: |
+          APP='target/release/bundle/osx/Zed Lite.app'
+          script/install-bundled-git-macos "$APP"
+          sed '/com.apple.developer.associated-domains/,+1d' crates/zed/resources/zed.entitlements > target/local-editor.entitlements
+          codesign --force --deep --entitlements target/local-editor.entitlements --sign - "$APP"
+          rm -rf target/dmg
+          mkdir -p target/dmg
+          ln -s /Applications target/dmg/Applications
+          ditto "$APP" 'target/dmg/Zed Lite.app'
+          hdiutil create -volname 'Zed Lite' -srcfolder target/dmg -ov -format UDZO target/Zed-Lite-macOS-arm64.dmg
+      - name: Verify application bundle
+        timeout-minutes: 5
+        run: |
+          APP='target/release/bundle/osx/Zed Lite.app'
+          plutil -lint "$APP/Contents/Info.plist"
+          codesign --verify --deep --strict "$APP"
+          EXPECTED_VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("crates/zed/Cargo.toml", "rb"))["package"]["version"])')"
+          test "$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")" = "$EXPECTED_VERSION"
+          test "$(plutil -extract CFBundleIdentifier raw "$APP/Contents/Info.plist")" = io.github.tianjianjun0727.zed-lite
+          test "$(plutil -extract CFBundleExecutable raw "$APP/Contents/Info.plist")" = zed-lite
+          test "$(lipo -archs "$APP/Contents/MacOS/zed-lite")" = arm64
+          "$APP/Contents/MacOS/zed-lite" --help
+          "$APP/Contents/MacOS/zed-lite" --dump-all-actions > target/packaged-localization-contracts.json
+          python3 script/check-locales.py --actions target/packaged-localization-contracts.json
+          CLI_VERSION="$("$APP/Contents/MacOS/cli" --zed "$APP" --version)"
+          echo "$CLI_VERSION"
+          case "$CLI_VERSION" in
+            "Zed Lite $EXPECTED_VERSION – "*) ;;
+            *) echo 'Unexpected bundled CLI version'; exit 1 ;;
+          esac
+          "$APP/Contents/MacOS/git" --version
+          SMOKE_REPOSITORY="$(mktemp -d)"
+          "$APP/Contents/MacOS/git" -C "$SMOKE_REPOSITORY" init --quiet
+          "$APP/Contents/MacOS/git" -C "$SMOKE_REPOSITORY" status --short
+          rm -rf "$SMOKE_REPOSITORY"
+          env -u GIT_EXEC_PATH GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 "$APP/Contents/MacOS/git" ls-remote "https://github.com/$GITHUB_REPOSITORY.git" HEAD > target/bundled-git-remote.txt
+          test -s target/bundled-git-remote.txt
+          hdiutil imageinfo target/Zed-Lite-macOS-arm64.dmg
+      - name: Record build provenance
+        env:
+          APP_SOURCE_SHA: ${{ needs.localization.outputs.package_source_sha || github.sha }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          Path("target/build-provenance.json").write_text(json.dumps({
+              "app_source_sha": os.environ["APP_SOURCE_SHA"],
+              "packaging_sha": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+          }, indent=2) + "\n")
+          PYTHON
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: Zed-Local-macOS-arm64
-          path: target/Zed-Local-macOS-arm64.zip
+          name: Zed-Lite-macOS-arm64
+          path: |
+            target/Zed-Lite-macOS-arm64.dmg
+            target/build-provenance.json
           if-no-files-found: error
           retention-days: 14
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830

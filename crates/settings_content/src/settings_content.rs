@@ -1,10 +1,8 @@
 mod action;
-mod agent;
 mod editor;
 mod extension;
 mod fallible_options;
 mod language;
-mod language_model;
 pub mod merge_from;
 mod project;
 mod serde_helper;
@@ -14,13 +12,11 @@ mod title_bar;
 mod workspace;
 
 pub use action::{ActionName, ActionWithArguments, CommandAliasTarget};
-pub use agent::*;
 use anyhow::Context;
 pub use editor::*;
 pub use extension::*;
 pub use fallible_options::*;
 pub use language::*;
-pub use language_model::*;
 pub use merge_from::MergeFrom as MergeFromTrait;
 pub use project::*;
 use serde::de::DeserializeOwned;
@@ -98,7 +94,6 @@ macro_rules! settings_overrides {
         }
     }
 }
-use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
 use std::sync::Arc;
 pub use util::serde::default_true;
@@ -188,7 +183,6 @@ pub struct SettingsContent {
     pub editor: EditorSettingsContent,
 
     #[serde(flatten)]
-    pub remote: RemoteSettingsContent,
 
     /// Settings related to the command palette.
     pub command_palette: Option<CommandPaletteSettingsContent>,
@@ -207,15 +201,7 @@ pub struct SettingsContent {
 
     pub preview_tabs: Option<PreviewTabsSettingsContent>,
 
-    pub agent: Option<AgentSettingsContent>,
-    pub agent_servers: Option<AllAgentServersSettings>,
-
-    /// Configuration of audio in Zed.
-    pub audio: Option<AudioSettingsContent>,
-
-    /// Whether or not to automatically check for updates.
-    ///
-    /// Default: true
+    /// Whether to automatically check this fork for updates.
     pub auto_update: Option<bool>,
 
     /// This base keymap settings adjusts the default keybindings in Zed to be similar
@@ -224,9 +210,6 @@ pub struct SettingsContent {
     ///
     /// Default: VSCode
     pub base_keymap: Option<BaseKeymapContent>,
-
-    /// Configuration for the collab panel visual settings.
-    pub collaboration_panel: Option<PanelSettingsContent>,
 
     pub debugger: Option<DebuggerSettingsContent>,
 
@@ -269,10 +252,6 @@ pub struct SettingsContent {
 
     pub line_indicator_format: Option<LineIndicatorFormat>,
 
-    pub language_models: Option<AllLanguageModelSettingsContent>,
-
-    pub copilot: Option<CopilotSettingsContent>,
-
     pub outline_panel: Option<OutlinePanelSettingsContent>,
 
     pub project_panel: Option<ProjectPanelSettingsContent>,
@@ -288,20 +267,8 @@ pub struct SettingsContent {
     /// Default: off
     pub reduce_motion: Option<ReduceMotionMode>,
 
-    /// The URL of the Zed server to connect to.
-    pub server_url: Option<String>,
-
-    /// The URL used as the key for credential storage.
-    ///
-    /// When set, credentials are stored under this URL instead of `server_url`.
-    /// This allows running multiple Zed instances side by side without them
-    /// overwriting each other's keychain entries.
-    pub credentials_url: Option<String>,
-
     /// Configuration for session-related features
     pub session: Option<SessionSettingsContent>,
-    /// Control what info is collected by Zed.
-    pub telemetry: Option<TelemetrySettingsContent>,
 
     /// Configuration of the terminal in Zed.
     pub terminal: Option<TerminalSettingsContent>,
@@ -318,9 +285,6 @@ pub struct SettingsContent {
     ///
     /// Default: false
     pub vim_mode: Option<bool>,
-
-    // Settings related to calls in Zed
-    pub calls: Option<CallSettingsContent>,
 
     /// Settings for the which-key popup.
     pub which_key: Option<WhichKeySettingsContent>,
@@ -409,15 +373,14 @@ impl SettingsContent {
 }
 
 fallible_options::flattened_deserialize!(SettingsContent {
-    sections: { project, theme, extension, workspace, editor, remote },
+    sections: { project, theme, extension, workspace, editor },
     options: {
-        call_hierarchy, command_palette, file_finder, git_panel, tabs, tab_bar, tab_switcher, status_bar, preview_tabs, agent,
-        agent_servers, audio, auto_update, base_keymap, collaboration_panel, debugger, diagnostics,
+        call_hierarchy, command_palette, file_finder, git_panel, tabs, tab_bar, tab_switcher, status_bar, preview_tabs, auto_update, base_keymap, debugger, diagnostics,
         git,
         global_lsp_settings, image_viewer, markdown_preview, repl, helix_mode, hide_mouse,
-        journal, log, line_indicator_format, language_models, copilot, outline_panel, project_panel,
-        node, proxy, reduce_motion, server_url, credentials_url, session, telemetry, terminal,
-        title_bar, vim_mode, calls, which_key, vim, modeline_lines, feature_flags,
+        journal, log, line_indicator_format, outline_panel, project_panel,
+        node, proxy, reduce_motion, session, terminal,
+        title_bar, vim_mode, which_key, vim, modeline_lines, feature_flags,
         instrumentation, ui_language,
     },
     defaults: {},
@@ -597,79 +560,6 @@ impl strum::VariantNames for UiLanguageContent {
     const VARIANTS: &'static [&'static str] = &["System", "简体中文", "English"];
 }
 
-/// Configuration of audio in Zed.
-#[with_fallible_options]
-#[derive(Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug)]
-pub struct AudioSettingsContent {
-    /// Select specific output audio device.
-    #[serde(rename = "experimental.output_audio_device")]
-    pub output_audio_device: Option<AudioOutputDeviceName>,
-    /// Select specific input audio device.
-    #[serde(rename = "experimental.input_audio_device")]
-    pub input_audio_device: Option<AudioInputDeviceName>,
-}
-
-#[derive(Clone, Default, Debug, Serialize, Deserialize, JsonSchema, MergeFrom, PartialEq, Eq)]
-#[serde(transparent)]
-pub struct AudioOutputDeviceName(pub Option<String>);
-
-impl AsRef<Option<String>> for AudioInputDeviceName {
-    fn as_ref(&self) -> &Option<String> {
-        &self.0
-    }
-}
-
-impl From<Option<String>> for AudioInputDeviceName {
-    fn from(value: Option<String>) -> Self {
-        Self(value)
-    }
-}
-
-#[derive(Clone, Default, Debug, Serialize, Deserialize, JsonSchema, MergeFrom, PartialEq, Eq)]
-#[serde(transparent)]
-pub struct AudioInputDeviceName(pub Option<String>);
-
-impl AsRef<Option<String>> for AudioOutputDeviceName {
-    fn as_ref(&self) -> &Option<String> {
-        &self.0
-    }
-}
-
-impl From<Option<String>> for AudioOutputDeviceName {
-    fn from(value: Option<String>) -> Self {
-        Self(value)
-    }
-}
-
-/// Control what info is collected by Zed.
-#[with_fallible_options]
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Debug, MergeFrom)]
-pub struct TelemetrySettingsContent {
-    /// Send debug info like crash reports.
-    ///
-    /// Default: true
-    pub diagnostics: Option<bool>,
-    /// Send anonymized usage data like what languages you're using Zed with.
-    ///
-    /// Default: true
-    pub metrics: Option<bool>,
-    /// Allow sending requests to Anthropic models that cannot be offered with
-    /// Zero Data Retention.
-    ///
-    /// Default: false
-    pub anthropic_retention: Option<bool>,
-}
-
-impl Default for TelemetrySettingsContent {
-    fn default() -> Self {
-        Self {
-            diagnostics: Some(true),
-            metrics: Some(true),
-            anthropic_retention: Some(false),
-        }
-    }
-}
-
 #[with_fallible_options]
 #[derive(Default, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Clone, MergeFrom)]
 pub struct DebuggerSettingsContent {
@@ -748,21 +638,6 @@ pub enum DockPosition {
     Left,
     Bottom,
     Right,
-}
-
-/// Configuration of voice calls in Zed.
-#[with_fallible_options]
-#[derive(Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema, MergeFrom, Debug)]
-pub struct CallSettingsContent {
-    /// Whether the microphone should be muted when joining a channel or a call.
-    ///
-    /// Default: false
-    pub mute_on_join: Option<bool>,
-
-    /// Whether your current project should be shared when joining an empty channel.
-    ///
-    /// Default: false
-    pub share_on_join: Option<bool>,
 }
 
 #[with_fallible_options]
@@ -1024,10 +899,6 @@ pub struct FileFinderSettingsContent {
     ///
     /// Default: Smart
     pub include_ignored: Option<IncludeIgnoredContent>,
-    /// Whether to include text channels in file finder results.
-    ///
-    /// Default: false
-    pub include_channels: Option<bool>,
     /// Whether to pre-fill the file finder's query with the text selected in the
     /// focused item (e.g. an editor or a terminal) when it is opened.
     ///
@@ -1119,9 +990,6 @@ pub struct VimSettingsContent {
     pub custom_digraphs: Option<HashMap<String, Arc<str>>>,
     pub highlight_on_yank_duration: Option<u64>,
     pub cursor_shape: Option<CursorShapeSettings>,
-    /// When enabled, edit predictions are shown in Vim normal mode.
-    /// By default, edit predictions are only shown in insert and replace modes.
-    pub show_edit_predictions_in_normal_mode: Option<bool>,
 }
 
 #[derive(
@@ -1431,88 +1299,6 @@ pub enum ImageFileSizeUnit {
     Decimal,
 }
 
-#[with_fallible_options]
-#[derive(Clone, Debug, Default, Serialize, Deserialize, JsonSchema, MergeFrom, PartialEq)]
-pub struct RemoteSettingsContent {
-    pub ssh_connections: Option<Vec<SshConnection>>,
-    pub wsl_connections: Option<Vec<WslConnection>>,
-    pub dev_container_connections: Option<Vec<DevContainerConnection>>,
-    pub read_ssh_config: Option<bool>,
-    pub use_podman: Option<bool>,
-    /// Whether to build dev container images with BuildKit.
-    ///
-    /// When unset, Zed auto-detects BuildKit by probing for the `buildx` CLI
-    /// plugin. Set to `false` to force the classic Docker builder, which is
-    /// required for Docker-compatible engines that lack an integrated BuildKit
-    /// (e.g. Apple Container via a Docker-API bridge), where BuildKit builds
-    /// cannot resolve locally-built images.
-    ///
-    /// Default: null (auto-detect)
-    pub dev_container_use_buildkit: Option<bool>,
-}
-
-#[with_fallible_options]
-#[derive(
-    Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq, JsonSchema, MergeFrom, Hash,
-)]
-pub struct DevContainerConnection {
-    pub name: String,
-    pub remote_user: String,
-    pub container_id: String,
-    pub use_podman: bool,
-    pub extension_ids: Vec<String>,
-    pub remote_env: BTreeMap<String, String>,
-}
-
-#[with_fallible_options]
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, JsonSchema, MergeFrom)]
-pub struct SshConnection {
-    pub host: String,
-    pub username: Option<String>,
-    pub port: Option<u16>,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub projects: collections::BTreeSet<RemoteProject>,
-    /// Name to use for this server in UI.
-    pub nickname: Option<String>,
-    // By default Zed will download the binary to the host directly.
-    // If this is set to true, Zed will download the binary to your local machine,
-    // and then upload it over the SSH connection. Useful if your SSH server has
-    // limited outbound internet access.
-    pub upload_binary_over_ssh: Option<bool>,
-
-    pub port_forwards: Option<Vec<SshPortForwardOption>>,
-    /// Timeout in seconds for SSH connection and downloading the remote server binary.
-    /// Defaults to 10 seconds if not specified.
-    pub connection_timeout: Option<u16>,
-}
-
-#[derive(Clone, Default, Serialize, Deserialize, PartialEq, JsonSchema, MergeFrom, Debug)]
-pub struct WslConnection {
-    pub distro_name: String,
-    pub user: Option<String>,
-    #[serde(default)]
-    pub projects: BTreeSet<RemoteProject>,
-}
-
-#[with_fallible_options]
-#[derive(
-    Clone, Debug, Default, Serialize, PartialEq, Eq, PartialOrd, Ord, Deserialize, JsonSchema,
-)]
-pub struct RemoteProject {
-    pub paths: Vec<String>,
-}
-
-#[with_fallible_options]
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, JsonSchema, MergeFrom)]
-pub struct SshPortForwardOption {
-    pub local_host: Option<String>,
-    pub local_port: u16,
-    pub remote_host: Option<String>,
-    pub remote_port: u16,
-}
-
 /// Settings for configuring REPL display and behavior.
 #[with_fallible_options]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, MergeFrom)]
@@ -1663,7 +1449,7 @@ impl<T: Clone + std::hash::Hash + Eq> merge_from::MergeFrom for ExtendingSet<T> 
 // A SaturatingBool in the settings can only ever be set to true,
 // later attempts to set it to false will be ignored.
 //
-// Used by `disable_ai`.
+// Currently unused but kept for settings that must never be un-set.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SaturatingBool(pub bool);
 

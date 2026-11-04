@@ -1162,10 +1162,6 @@ impl Item for ProjectSearchView {
             .unwrap_or_else(|| t!("search.project_search.tab_title").into())
     }
 
-    fn telemetry_event_text(&self) -> Option<&'static str> {
-        Some("Project Search Opened")
-    }
-
     fn for_each_project_item(
         &self,
         cx: &App,
@@ -3496,11 +3492,7 @@ fn is_buffer_stale(
         !workspace.read(cx).items(cx).any(|item| {
             item.buffer_kind(cx) == ItemBufferKind::Singleton
                 && item.project_item_model_ids(cx).contains(&buffer_entity_id)
-        }) && !project
-            .read(cx)
-            .buffer_store()
-            .read(cx)
-            .is_shared(buffer.remote_id(), cx)
+        })
     } else {
         false
     }
@@ -4104,89 +4096,6 @@ pub mod tests {
                     .results_editor
                     .update(cx, |editor, cx| editor.display_text(cx));
                 assert_eq!("\n\nconst ONE: usize = 1;", results_text);
-            })
-            .unwrap();
-    }
-
-    #[gpui::test]
-    async fn test_search_results_keep_peer_shared_untitled_buffers(cx: &mut TestAppContext) {
-        init_test(cx);
-
-        let fs = FakeFs::new(cx.background_executor.clone());
-        fs.insert_tree(
-            path!("/dir"),
-            json!({
-                "one.rs": "const ONE: usize = 1;",
-            }),
-        )
-        .await;
-
-        let project = Project::test(fs.clone(), [path!("/dir").as_ref()], cx).await;
-        let window =
-            cx.add_window(|window, cx| MultiWorkspace::test_new(project.clone(), window, cx));
-        let workspace = window
-            .read_with(cx, |mw, _| mw.workspace().clone())
-            .unwrap();
-
-        let untitled_buffer = project.update(cx, |project, cx| {
-            project.create_local_buffer("const TWO: usize = one::ONE;\n", None, true, cx)
-        });
-        project.update(cx, |project, cx| {
-            project.buffer_store().update(cx, |buffer_store, cx| {
-                buffer_store
-                    .create_buffer_for_peer(
-                        &untitled_buffer,
-                        proto::PeerId { owner_id: 0, id: 1 },
-                        cx,
-                    )
-                    .detach_and_log_err(cx);
-            });
-        });
-
-        let search = cx.new(|cx| ProjectSearch::new(project, workspace.downgrade(), cx));
-        let search_view = cx.add_window(|window, cx| {
-            ProjectSearchView::new(workspace.downgrade(), search.clone(), window, cx, None)
-        });
-
-        perform_search(search_view, "const", cx);
-        search_view
-            .update(cx, |search_view, _window, cx| {
-                let results_text = search_view
-                    .results_editor
-                    .update(cx, |editor, cx| editor.display_text(cx));
-                assert_eq!(
-                    "\n\nconst TWO: usize = one::ONE;\n\n\n\nconst ONE: usize = 1;",
-                    results_text
-                );
-            })
-            .unwrap();
-
-        search.update(cx, |search, cx| search.remove_closed_untitled_buffers(cx));
-        cx.run_until_parked();
-
-        search_view
-            .update(cx, |search_view, _window, cx| {
-                let results_text = search_view
-                    .results_editor
-                    .update(cx, |editor, cx| editor.display_text(cx));
-                assert_eq!(
-                    "\n\nconst TWO: usize = one::ONE;\n\n\n\nconst ONE: usize = 1;",
-                    results_text
-                );
-            })
-            .unwrap();
-
-        perform_search(search_view, "const", cx);
-
-        search_view
-            .update(cx, |search_view, _window, cx| {
-                let results_text = search_view
-                    .results_editor
-                    .update(cx, |editor, cx| editor.display_text(cx));
-                assert_eq!(
-                    "\n\nconst TWO: usize = one::ONE;\n\n\n\nconst ONE: usize = 1;",
-                    results_text
-                );
             })
             .unwrap();
     }

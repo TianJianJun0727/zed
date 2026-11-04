@@ -364,32 +364,7 @@ impl PickerDelegate for AttachModalDelegate {
 fn get_processes_for_project(project: &Entity<Project>, cx: &mut App) -> Task<Arc<[Candidate]>> {
     let project = project.read(cx);
 
-    if let Some(remote_client) = project.remote_client() {
-        let proto_client = remote_client.read(cx).proto_client();
-        cx.background_spawn(async move {
-            let response = proto_client
-                .request(proto::GetProcesses {
-                    project_id: proto::REMOTE_SERVER_PROJECT_ID,
-                })
-                .await
-                .unwrap_or_else(|_| proto::GetProcessesResponse {
-                    processes: Vec::new(),
-                });
-
-            let mut processes: Vec<Candidate> = response
-                .processes
-                .into_iter()
-                .map(|p| Candidate {
-                    pid: p.pid,
-                    name: p.name.into(),
-                    command: p.command,
-                })
-                .collect();
-
-            processes.sort_by_key(|k| k.name.clone());
-            Arc::from(processes.into_boxed_slice())
-        })
-    } else {
+    {
         let refresh_kind = RefreshKind::nothing().with_processes(
             ProcessRefreshKind::nothing()
                 .without_tasks()

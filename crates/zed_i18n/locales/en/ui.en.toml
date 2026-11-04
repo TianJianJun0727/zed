@@ -44,13 +44,3 @@ reset_key = "Reset Key"
 no_items = "No items"
 
 [ui.ai_setting_item]
-status_stopped = "Server is stopped."
-status_starting = "Server is starting."
-status_running = "Server is active."
-status_error = "Server has an error."
-status_auth_required = "Authentication Required."
-status_client_secret_required = "Client Secret Required."
-status_authenticating = "Waiting for Authorization…"
-source_extension = "%{label} was installed from an extension."
-source_registry = "%{label} was installed from the ACP registry."
-source_custom = "%{label} was configured manually."

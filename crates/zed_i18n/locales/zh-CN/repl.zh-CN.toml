@@ -8,7 +8,6 @@ _version = 1
 recommended = "推荐"
 python_environments = "Python 环境"
 jupyter_kernels = "Jupyter 内核"
-wsl_kernels = "WSL 内核"
 remote_servers = "远程服务器"
 select_kernel_placeholder = "选择内核…"
 ipykernel_not_installed = "未安装 ipykernel"

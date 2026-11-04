@@ -11,7 +11,7 @@ use parking_lot::Mutex;
 use postage::stream::Stream;
 use pretty_assertions::assert_eq;
 use rand::prelude::*;
-use rpc::{AnyProtoClient, NoopProtoClient, proto};
+use rpc::proto;
 use worktree::{Entry, EntryKind, Event, PathChange, Worktree, WorktreeModelHandle};
 
 use serde_json::json;
@@ -3119,22 +3119,6 @@ async fn test_create_directory_during_initial_scan(cx: &mut TestAppContext) {
     .await
     .unwrap();
 
-    let snapshot1 = tree.update(cx, |tree, cx| {
-        let tree = tree.as_local_mut().unwrap();
-        let snapshot = Arc::new(Mutex::new(tree.snapshot()));
-        tree.observe_updates(0, cx, {
-            let snapshot = snapshot.clone();
-            let settings = tree.settings();
-            move |update| {
-                snapshot
-                    .lock()
-                    .apply_remote_update(update, &settings.file_scan_inclusions);
-                async { true }
-            }
-        });
-        snapshot
-    });
-
     let entry = tree
         .update(cx, |tree, cx| {
             tree.as_local_mut()
@@ -3154,12 +3138,6 @@ async fn test_create_directory_during_initial_scan(cx: &mut TestAppContext) {
             EntryKind::Dir
         );
     });
-
-    let snapshot2 = tree.update(cx, |tree, _| tree.as_local().unwrap().snapshot());
-    assert_eq!(
-        snapshot1.lock().entries(true, 0).collect::<Vec<_>>(),
-        snapshot2.entries(true, 0).collect::<Vec<_>>()
-    );
 }
 
 #[gpui::test]
@@ -3518,19 +3496,7 @@ async fn test_random_worktree_operations_during_initial_scan(
     .await
     .unwrap();
 
-    let mut snapshots = vec![worktree.read_with(cx, |tree, _| tree.as_local().unwrap().snapshot())];
-    let updates = Arc::new(Mutex::new(Vec::new()));
-    worktree.update(cx, |tree, cx| {
-        check_worktree_change_events(tree, cx);
-
-        tree.as_local_mut().unwrap().observe_updates(0, cx, {
-            let updates = updates.clone();
-            move |update| {
-                updates.lock().push(update);
-                async { true }
-            }
-        });
-    });
+    worktree.update(cx, |tree, cx| check_worktree_change_events(tree, cx));
 
     for _ in 0..operations {
         worktree
@@ -3542,10 +3508,6 @@ async fn test_random_worktree_operations_during_initial_scan(
         worktree.read_with(cx, |tree, _| {
             tree.as_local().unwrap().snapshot().check_invariants(true)
         });
-
-        if rng.random_bool(0.6) {
-            snapshots.push(worktree.read_with(cx, |tree, _| tree.as_local().unwrap().snapshot()));
-        }
     }
 
     worktree
@@ -3554,30 +3516,12 @@ async fn test_random_worktree_operations_during_initial_scan(
 
     cx.executor().run_until_parked();
 
-    let final_snapshot = worktree.read_with(cx, |tree, _| {
+    let _final_snapshot = worktree.read_with(cx, |tree, _| {
         let tree = tree.as_local().unwrap();
         let snapshot = tree.snapshot();
         snapshot.check_invariants(true);
         snapshot
     });
-
-    let settings = worktree.read_with(cx, |tree, _| tree.as_local().unwrap().settings());
-
-    for (i, snapshot) in snapshots.into_iter().enumerate().rev() {
-        let mut updated_snapshot = snapshot.clone();
-        for update in updates.lock().iter() {
-            if update.scan_id >= updated_snapshot.scan_id() as u64 {
-                updated_snapshot
-                    .apply_remote_update(update.clone(), &settings.file_scan_inclusions);
-            }
-        }
-
-        assert_eq!(
-            updated_snapshot.entries(true, 0).collect::<Vec<_>>(),
-            final_snapshot.entries(true, 0).collect::<Vec<_>>(),
-            "wrong updates after snapshot {i}: {updates:#?}",
-        );
-    }
 }
 
 #[gpui::test(iterations = 100)]
@@ -3610,25 +3554,13 @@ async fn test_random_worktree_changes(cx: &mut TestAppContext, mut rng: StdRng) 
     .await
     .unwrap();
 
-    let updates = Arc::new(Mutex::new(Vec::new()));
-    worktree.update(cx, |tree, cx| {
-        check_worktree_change_events(tree, cx);
-
-        tree.as_local_mut().unwrap().observe_updates(0, cx, {
-            let updates = updates.clone();
-            move |update| {
-                updates.lock().push(update);
-                async { true }
-            }
-        });
-    });
+    worktree.update(cx, |tree, cx| check_worktree_change_events(tree, cx));
 
     worktree
         .update(cx, |tree, _| tree.as_local_mut().unwrap().scan_complete())
         .await;
 
     fs.as_fake().pause_events();
-    let mut snapshots = Vec::new();
     let mut mutations_len = operations;
     while mutations_len > 1 {
         if rng.random_bool(0.2) {
@@ -3661,11 +3593,6 @@ async fn test_random_worktree_changes(cx: &mut TestAppContext, mut rng: StdRng) 
         }
 
         cx.executor().run_until_parked();
-        if rng.random_bool(0.2) {
-            log::info!("storing snapshot {}", snapshots.len());
-            let snapshot = worktree.read_with(cx, |tree, _| tree.as_local().unwrap().snapshot());
-            snapshots.push(snapshot);
-        }
     }
 
     log::info!("quiescing");
@@ -3711,36 +3638,6 @@ async fn test_random_worktree_changes(cx: &mut TestAppContext, mut rng: StdRng) 
             snapshot.entries_without_ids(true),
             new_snapshot.entries_without_ids(true)
         );
-    }
-
-    let settings = worktree.read_with(cx, |tree, _| tree.as_local().unwrap().settings());
-
-    for (i, mut prev_snapshot) in snapshots.into_iter().enumerate().rev() {
-        for update in updates.lock().iter() {
-            if update.scan_id >= prev_snapshot.scan_id() as u64 {
-                prev_snapshot.apply_remote_update(update.clone(), &settings.file_scan_inclusions);
-            }
-        }
-
-        assert_eq!(
-            prev_snapshot
-                .entries(true, 0)
-                .map(ignore_pending_dir)
-                .collect::<Vec<_>>(),
-            snapshot
-                .entries(true, 0)
-                .map(ignore_pending_dir)
-                .collect::<Vec<_>>(),
-            "wrong updates after snapshot {i}: {updates:#?}",
-        );
-    }
-
-    fn ignore_pending_dir(entry: &Entry) -> Entry {
-        let mut entry = entry.clone();
-        if entry.kind.is_dir() {
-            entry.kind = EntryKind::Dir
-        }
-        entry
     }
 }
 
@@ -6453,477 +6350,6 @@ async fn test_root_ancestor_rename_is_detected_without_fs_events(cx: &mut TestAp
     });
 }
 
-#[gpui::test]
-async fn test_remote_worktree_without_git_emits_root_repo_event_after_first_update(
-    cx: &mut TestAppContext,
-) {
-    cx.update(|cx| {
-        let store = SettingsStore::test(cx);
-        cx.set_global(store);
-    });
-
-    let client = AnyProtoClient::new(NoopProtoClient::new());
-
-    let worktree = cx.update(|cx| {
-        Worktree::remote(
-            1,
-            clock::ReplicaId::new(1),
-            proto::WorktreeMetadata {
-                id: 1,
-                root_name: "project".to_string(),
-                visible: true,
-                abs_path: "/home/user/project".to_string(),
-                root_repo_common_dir: None,
-                root_repo_is_linked_worktree: false,
-            },
-            client,
-            PathStyle::Unix,
-            cx,
-        )
-    });
-
-    let events: Arc<std::sync::Mutex<Vec<&'static str>>> =
-        Arc::new(std::sync::Mutex::new(Vec::new()));
-    let events_clone = events.clone();
-    cx.update(|cx| {
-        cx.subscribe(&worktree, move |_, event, _cx| {
-            if matches!(event, Event::UpdatedRootRepoCommonDir { .. }) {
-                events_clone
-                    .lock()
-                    .unwrap()
-                    .push("UpdatedRootRepoCommonDir");
-            }
-            if matches!(event, Event::UpdatedEntries(_)) {
-                events_clone.lock().unwrap().push("UpdatedEntries");
-            }
-        })
-        .detach();
-    });
-
-    // Send an update with entries but no repo info (plain directory).
-    worktree.update(cx, |worktree, _cx| {
-        worktree
-            .as_remote()
-            .unwrap()
-            .update_from_remote(proto::UpdateWorktree {
-                project_id: 1,
-                worktree_id: 1,
-                abs_path: "/home/user/project".to_string(),
-                root_name: "project".to_string(),
-                updated_entries: vec![proto::Entry {
-                    id: 1,
-                    is_dir: true,
-                    path: "".to_string(),
-                    inode: 1,
-                    mtime: Some(proto::Timestamp {
-                        seconds: 0,
-                        nanos: 0,
-                    }),
-                    is_ignored: false,
-                    is_hidden: false,
-                    is_external: false,
-                    is_fifo: false,
-                    size: None,
-                    canonical_path: None,
-                    is_unloaded: false,
-                }],
-                removed_entries: vec![],
-                scan_id: 1,
-                is_last_update: true,
-                updated_repositories: vec![],
-                removed_repositories: vec![],
-                root_repo_common_dir: None,
-                root_repo_is_linked_worktree: false,
-            });
-    });
-
-    cx.run_until_parked();
-
-    let fired = events.lock().unwrap();
-    assert!(
-        fired.contains(&"UpdatedEntries"),
-        "UpdatedEntries should fire after remote update"
-    );
-    assert!(
-        fired.contains(&"UpdatedRootRepoCommonDir"),
-        "UpdatedRootRepoCommonDir should fire after first remote update even when \
-         root_repo_common_dir is None, to signal that repo state is now known"
-    );
-}
-
-#[gpui::test]
-async fn test_remote_single_file_worktree_abs_path(cx: &mut TestAppContext) {
-    cx.update(|cx| {
-        let store = SettingsStore::test(cx);
-        cx.set_global(store);
-    });
-
-    let worktree = cx.update(|cx| {
-        Worktree::remote(
-            1,
-            clock::ReplicaId::new(1),
-            proto::WorktreeMetadata {
-                id: 1,
-                root_name: "config".to_string(),
-                visible: true,
-                abs_path: "/home/user/.ssh/config".to_string(),
-                root_repo_common_dir: None,
-                root_repo_is_linked_worktree: false,
-            },
-            AnyProtoClient::new(NoopProtoClient::new()),
-            PathStyle::Unix,
-            cx,
-        )
-    });
-
-    let file = worktree::File {
-        worktree,
-        path: Arc::from(rel_path("")),
-        disk_state: language::DiskState::New,
-        entry_id: None,
-        is_local: false,
-        is_private: false,
-    };
-
-    cx.read(|cx| {
-        assert_eq!(
-            language::File::full_path(&file, cx),
-            PathBuf::from("config")
-        );
-        assert_eq!(
-            language::File::file_system_abs_path(&file, cx),
-            Some(PathBuf::from("/home/user/.ssh/config"))
-        );
-    });
-}
-
-#[gpui::test]
-fn test_remote_worktree_language_matching(cx: &mut TestAppContext) {
-    init_test(cx);
-    cx.update_global::<SettingsStore, _>(|store, cx| {
-        store.update_user_settings(cx, |settings| {
-            settings
-                .project
-                .all_languages
-                .file_types
-                .get_or_insert_default()
-                .0
-                .extend([
-                    (
-                        "Plain Text".into(),
-                        vec![
-                            "repo/templates/*.html".into(),
-                            #[cfg(unix)]
-                            r"repo\\raw\\*.html".into(),
-                        ]
-                        .into(),
-                    ),
-                    ("SSH Config".into(), vec!["**/.ssh/config".into()].into()),
-                ]);
-        });
-    });
-    let registry = Arc::new(language::LanguageRegistry::test(cx.executor()));
-    for (name, suffixes) in [
-        ("Plain Text", vec![]),
-        ("SSH Config", vec![]),
-        ("HTML", vec!["html".into()]),
-        ("Git Commit", vec!["COMMIT_EDITMSG".into()]),
-        ("INI", vec!["config".into()]),
-    ] {
-        registry.register_test_language(language::LanguageConfig {
-            name: name.into(),
-            matcher: language::LanguageMatcher {
-                path_suffixes: suffixes,
-                ..Default::default()
-            }
-            .into(),
-            ..Default::default()
-        });
-    }
-
-    let mut actual = Vec::new();
-    for (root_name, abs_path, path, path_style) in [
-        ("repo", "/tmp/repo", "templates/index.html", PathStyle::Unix),
-        ("config", "/home/user/.ssh/config", "", PathStyle::Unix),
-        (
-            "COMMIT_EDITMSG",
-            r"C:\review60307\COMMIT_EDITMSG",
-            "",
-            PathStyle::Windows,
-        ),
-        (
-            "COMMIT_EDITMSG",
-            r"\\server\share\COMMIT_EDITMSG",
-            "",
-            PathStyle::Windows,
-        ),
-        (
-            "config",
-            r"C:\Users\user\.ssh\config",
-            "",
-            PathStyle::Windows,
-        ),
-        (
-            "config",
-            r"\\server\share\.ssh\config",
-            "",
-            PathStyle::Windows,
-        ),
-        (
-            "config",
-            "C:/Users/user/.ssh/config",
-            "",
-            PathStyle::Windows,
-        ),
-        (".ssh", r"C:\Users\用户\.ssh", "config", PathStyle::Windows),
-        (
-            "repo",
-            r"C:\repo",
-            "templates/index.html",
-            PathStyle::Windows,
-        ),
-        #[cfg(unix)]
-        ("config", r"/home/user\.ssh/config", "", PathStyle::Unix),
-        #[cfg(unix)]
-        ("repo", r"C:\repo", "raw/index.html", PathStyle::Windows),
-    ] {
-        cx.update(|cx| {
-            let worktree = Worktree::remote(
-                1,
-                clock::ReplicaId::new(1),
-                proto::WorktreeMetadata {
-                    id: 1,
-                    root_name: root_name.into(),
-                    visible: true,
-                    abs_path: abs_path.into(),
-                    root_repo_common_dir: None,
-                    root_repo_is_linked_worktree: false,
-                },
-                AnyProtoClient::new(NoopProtoClient::new()),
-                path_style,
-                cx,
-            );
-            let file: Arc<dyn language::File> = Arc::new(worktree::File {
-                worktree,
-                path: Arc::from(rel_path(path)),
-                disk_state: language::DiskState::New,
-                entry_id: None,
-                is_local: false,
-                is_private: false,
-            });
-            actual.push(
-                registry
-                    .language_for_file(&file, None, cx)
-                    .and_then(|id| registry.language_name_for_id(id)),
-            );
-        });
-    }
-    assert_eq!(
-        actual,
-        vec![
-            Some("Plain Text".into()),
-            Some("SSH Config".into()),
-            Some("Git Commit".into()),
-            Some("Git Commit".into()),
-            Some("SSH Config".into()),
-            Some("SSH Config".into()),
-            Some("SSH Config".into()),
-            Some("SSH Config".into()),
-            Some("Plain Text".into()),
-            #[cfg(unix)]
-            Some("INI".into()),
-            #[cfg(unix)]
-            Some("Plain Text".into()),
-        ]
-    );
-}
-
-#[gpui::test]
-async fn test_remote_worktree_with_git_emits_root_repo_event_when_repo_info_arrives(
-    cx: &mut TestAppContext,
-) {
-    cx.update(|cx| {
-        let store = SettingsStore::test(cx);
-        cx.set_global(store);
-    });
-
-    let client = AnyProtoClient::new(NoopProtoClient::new());
-
-    let worktree = cx.update(|cx| {
-        Worktree::remote(
-            1,
-            clock::ReplicaId::new(1),
-            proto::WorktreeMetadata {
-                id: 1,
-                root_name: "project".to_string(),
-                visible: true,
-                abs_path: "/home/user/project".to_string(),
-                root_repo_common_dir: None,
-                root_repo_is_linked_worktree: false,
-            },
-            client,
-            PathStyle::Unix,
-            cx,
-        )
-    });
-
-    let events: Arc<std::sync::Mutex<Vec<&'static str>>> =
-        Arc::new(std::sync::Mutex::new(Vec::new()));
-    let events_clone = events.clone();
-    cx.update(|cx| {
-        cx.subscribe(&worktree, move |_, event, _cx| {
-            if matches!(event, Event::UpdatedRootRepoCommonDir { .. }) {
-                events_clone
-                    .lock()
-                    .unwrap()
-                    .push("UpdatedRootRepoCommonDir");
-            }
-        })
-        .detach();
-    });
-
-    // Send an update where repo info arrives (None -> Some).
-    worktree.update(cx, |worktree, _cx| {
-        worktree
-            .as_remote()
-            .unwrap()
-            .update_from_remote(proto::UpdateWorktree {
-                project_id: 1,
-                worktree_id: 1,
-                abs_path: "/home/user/project".to_string(),
-                root_name: "project".to_string(),
-                updated_entries: vec![proto::Entry {
-                    id: 1,
-                    is_dir: true,
-                    path: "".to_string(),
-                    inode: 1,
-                    mtime: Some(proto::Timestamp {
-                        seconds: 0,
-                        nanos: 0,
-                    }),
-                    is_ignored: false,
-                    is_hidden: false,
-                    is_external: false,
-                    is_fifo: false,
-                    size: None,
-                    canonical_path: None,
-                    is_unloaded: false,
-                }],
-                removed_entries: vec![],
-                scan_id: 1,
-                is_last_update: true,
-                updated_repositories: vec![],
-                removed_repositories: vec![],
-                root_repo_common_dir: Some("/home/user/project/.git".to_string()),
-                root_repo_is_linked_worktree: false,
-            });
-    });
-
-    cx.run_until_parked();
-
-    let fired = events.lock().unwrap();
-    assert!(
-        fired.contains(&"UpdatedRootRepoCommonDir"),
-        "UpdatedRootRepoCommonDir should fire when repo info arrives (None -> Some)"
-    );
-    assert_eq!(
-        fired
-            .iter()
-            .filter(|e| **e == "UpdatedRootRepoCommonDir")
-            .count(),
-        1,
-        "should fire exactly once, not duplicate"
-    );
-}
-
-#[gpui::test]
-async fn test_remote_worktree_root_repo_metadata_cleared_only_by_completed_scan(
-    cx: &mut TestAppContext,
-) {
-    cx.update(|cx| {
-        let store = SettingsStore::test(cx);
-        cx.set_global(store);
-    });
-
-    let client = AnyProtoClient::new(NoopProtoClient::new());
-
-    // Metadata eagerly seeds the root repo info, as `AddWorktreeResponse` /
-    // `WorktreeMetadata` do before the host's scan completes.
-    let worktree = cx.update(|cx| {
-        Worktree::remote(
-            1,
-            clock::ReplicaId::new(1),
-            proto::WorktreeMetadata {
-                id: 1,
-                root_name: "feature-a".to_string(),
-                visible: true,
-                abs_path: "/home/user/monty/feature-a".to_string(),
-                root_repo_common_dir: Some("/home/user/monty/.bare".to_string()),
-                root_repo_is_linked_worktree: true,
-            },
-            client,
-            PathStyle::Unix,
-            cx,
-        )
-    });
-
-    let root_repo_metadata = |cx: &mut TestAppContext| {
-        worktree.read_with(cx, |worktree, _| {
-            let snapshot = worktree.snapshot();
-            (
-                snapshot.root_repo_common_dir().cloned(),
-                snapshot.root_repo_is_linked_worktree(),
-            )
-        })
-    };
-
-    let update = |scan_id: u64, is_last_update: bool| proto::UpdateWorktree {
-        project_id: 1,
-        worktree_id: 1,
-        abs_path: "/home/user/monty/feature-a".to_string(),
-        root_name: "feature-a".to_string(),
-        updated_entries: vec![],
-        removed_entries: vec![],
-        scan_id,
-        is_last_update,
-        updated_repositories: vec![],
-        removed_repositories: vec![],
-        root_repo_common_dir: None,
-        root_repo_is_linked_worktree: false,
-    };
-
-    // A mid-scan update without repo info must not clobber the seeded
-    // metadata: the sender's scanner may not have registered the repo yet.
-    worktree.update(cx, |worktree, _cx| {
-        worktree
-            .as_remote()
-            .unwrap()
-            .update_from_remote(update(2, false));
-    });
-    cx.run_until_parked();
-
-    assert_eq!(
-        root_repo_metadata(cx),
-        (Some(Arc::from(Path::new("/home/user/monty/.bare"))), true,),
-        "mid-scan update without repo info should not clear seeded metadata"
-    );
-
-    // A completed scan without repo info is authoritative: the repo is gone.
-    worktree.update(cx, |worktree, _cx| {
-        worktree
-            .as_remote()
-            .unwrap()
-            .update_from_remote(update(3, true));
-    });
-    cx.run_until_parked();
-
-    assert_eq!(
-        root_repo_metadata(cx),
-        (None, false),
-        "completed scan without repo info should clear root repo metadata"
-    );
-}
-
 // Regression test: a remote worktree used to emit `UpdatedEntries` with an
 // empty changeset (`Arc::default()`), discarding the changed paths. Consumers
 // that key off those paths - notably the agent's `.agents/skills` refresh -
@@ -6934,154 +6360,6 @@ async fn test_remote_worktree_root_repo_metadata_cleared_only_by_completed_scan(
 // worktree scans the filesystem and produces `UpdateWorktree` messages via
 // `observe_updates`, which we relay into a remote worktree exactly as the
 // collab server does.
-#[gpui::test]
-async fn test_remote_worktree_update_entries_carry_changed_paths(cx: &mut TestAppContext) {
-    init_test(cx);
-
-    let fs = FakeFs::new(cx.background_executor.clone());
-    fs.insert_tree(
-        path!("/root"),
-        json!({
-            ".agents": {
-                "skills": {}
-            }
-        }),
-    )
-    .await;
-
-    // The host worktree scans the fake filesystem and broadcasts updates.
-    let host = Worktree::local(
-        path!("/root").as_ref(),
-        true,
-        fs.clone(),
-        Default::default(),
-        true,
-        WorktreeId::from_proto(1),
-        &mut cx.to_async(),
-    )
-    .await
-    .unwrap();
-    cx.read(|cx| host.read(cx).as_local().unwrap().scan_complete())
-        .await;
-
-    // The remote worktree receives those updates over a simulated connection.
-    let remote = cx.update(|cx| {
-        Worktree::remote(
-            1,
-            clock::ReplicaId::new(1),
-            proto::WorktreeMetadata {
-                id: 1,
-                root_name: "root".to_string(),
-                visible: true,
-                abs_path: path!("/root").to_string(),
-                root_repo_common_dir: None,
-                root_repo_is_linked_worktree: false,
-            },
-            AnyProtoClient::new(NoopProtoClient::new()),
-            PathStyle::local(),
-            cx,
-        )
-    });
-
-    // Relay every `UpdateWorktree` the host emits into the remote worktree,
-    // mirroring how the collab server forwards them. The callback only buffers
-    // the messages; we apply them on the foreground via `relay`.
-    let pending: Arc<Mutex<Vec<proto::UpdateWorktree>>> = Arc::new(Mutex::new(Vec::new()));
-    host.update(cx, |host, cx| {
-        let pending = pending.clone();
-        host.as_local_mut()
-            .unwrap()
-            .observe_updates(1, cx, move |update| {
-                pending.lock().push(update);
-                async { true }
-            });
-    });
-    let relay = {
-        let remote = remote.clone();
-        move |cx: &mut TestAppContext| {
-            let updates = std::mem::take(&mut *pending.lock());
-            remote.update(cx, |remote, _| {
-                let remote = remote.as_remote().unwrap();
-                for update in updates {
-                    remote.update_from_remote(update);
-                }
-            });
-        }
-    };
-
-    // Record the (path, change) pairs from every `UpdatedEntries` event the
-    // remote worktree emits.
-    let changes: Arc<Mutex<Vec<(String, PathChange)>>> = Arc::new(Mutex::new(Vec::new()));
-    cx.update(|cx| {
-        let changes = changes.clone();
-        cx.subscribe(&remote, move |_, event, _cx| {
-            if let Event::UpdatedEntries(updated) = event {
-                changes.lock().extend(
-                    updated
-                        .iter()
-                        .map(|(path, _, change)| (path.as_unix_str().to_string(), *change)),
-                );
-            }
-        })
-        .detach();
-    });
-
-    // Flush the initial sync (root + existing dirs) and ignore those paths.
-    cx.run_until_parked();
-    relay(cx);
-    cx.run_until_parked();
-    changes.lock().clear();
-
-    // Paste a skill folder into `.agents/skills` on the host.
-    fs.insert_tree(
-        path!("/root/.agents/skills/skill-1"),
-        json!({ "SKILL.md": "skill" }),
-    )
-    .await;
-    cx.run_until_parked();
-    relay(cx);
-    cx.run_until_parked();
-
-    {
-        let changes = changes.lock();
-        assert!(
-            changes
-                .iter()
-                .any(|(path, change)| path == ".agents/skills/skill-1/SKILL.md"
-                    && *change == PathChange::AddedOrUpdated),
-            "remote UpdatedEntries should carry the added skill path, got {:?}",
-            changes
-        );
-    }
-    changes.lock().clear();
-
-    // Remove the skill folder. The wire format only carries entry ids for
-    // removals, so the remote worktree must resolve their paths against the
-    // previous snapshot before it is replaced.
-    fs.remove_dir(
-        path!("/root/.agents/skills/skill-1").as_ref(),
-        RemoveOptions {
-            recursive: true,
-            ignore_if_not_exists: false,
-        },
-    )
-    .await
-    .unwrap();
-    cx.run_until_parked();
-    relay(cx);
-    cx.run_until_parked();
-
-    let changes = changes.lock();
-    assert!(
-        changes
-            .iter()
-            .any(|(path, change)| path == ".agents/skills/skill-1/SKILL.md"
-                && *change == PathChange::Removed),
-        "remote UpdatedEntries should carry removed paths resolved from the \
-         previous snapshot, got {:?}",
-        changes
-    );
-}
 
 #[gpui::test]
 async fn test_deferred_watch_repository_above_root(

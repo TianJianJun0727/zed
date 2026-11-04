@@ -20,7 +20,6 @@ test-support = []
 extension_host.workspace = true
 gpui.workspace = true
 system_specs.workspace = true
-urlencoding.workspace = true
 util.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true

@@ -1,12 +1,12 @@
 [package]
-description = "The fast, collaborative code editor."
+description = "A local-project editor based on stable Zed."
 edition.workspace = true
 name = "zed"
 version = "1.26.2"
 publish.workspace = true
 license = "GPL-3.0-or-later"
 authors = ["Zed Team <hi@zed.dev>"]
-default-run = "zed"
+default-run = "zed-lite"
 
 [lints]
 workspace = true
@@ -28,34 +28,10 @@ test-support = [
     "repl/test-support",
     "title_bar/test-support",
 ]
-visual-tests = [
-    "gpui/test-support",
-    "gpui_platform/screen-capture",
-    "gpui_platform/test-support",
-    "dep:image",
-    "dep:tempfile",
-    "dep:action_log",
-    "dep:agent_servers",
-    "dep:env_logger",
-    "workspace/test-support",
-    "project/test-support",
-    "editor/test-support",
-    "terminal_view/test-support",
-    "image_viewer/test-support",
-    "clock/test-support",
-    "acp_thread/test-support",
-    "action_log/test-support",
-    "agent_ui/test-support",
-    "db/test-support",
-    "agent/test-support",
-    "language_model/test-support",
-    "fs/test-support",
-    "recent_projects/test-support",
-    "title_bar/test-support",
-]
+visual-tests = ["gpui/test-support", "gpui_platform/screen-capture", "gpui_platform/test-support", "dep:image", "dep:tempfile", "dep:env_logger", "workspace/test-support", "project/test-support", "editor/test-support", "terminal_view/test-support", "image_viewer/test-support", "clock/test-support", "db/test-support", "fs/test-support", "recent_projects/test-support", "title_bar/test-support"]
 
 [[bin]]
-name = "zed"
+name = "zed-lite"
 path = "src/main.rs"
 
 [[bin]]
@@ -64,46 +40,27 @@ path = "src/visual_test_runner.rs"
 required-features = ["visual-tests"]
 
 [dependencies]
-acp_thread.workspace = true
-acp_tools.workspace = true
-action_log = { workspace = true, optional = true }
+auto_update.workspace = true
+auto_update_ui.workspace = true
 activity_indicator.workspace = true
-agent-client-protocol.workspace = true
-agent.workspace = true
-agent_servers = { workspace = true, optional = true }
-agent_settings.workspace = true
-agent_skills.workspace = true
-agent_ui = { workspace = true, features = ["audio"] }
 anyhow.workspace = true
 askpass.workspace = true
 assets.workspace = true
-audio.workspace = true
-auto_update.workspace = true
-auto_update_ui.workspace = true
 breadcrumbs.workspace = true
-call.workspace = true
 call_hierarchy.workspace = true
-channel.workspace = true
 chrono.workspace = true
 clap.workspace = true
 cli.workspace = true
 client.workspace = true
 clock = { workspace = true, optional = true }
-codestral.workspace = true
-collab_ui.workspace = true
 collections.workspace = true
 command_palette.workspace = true
 component_preview.workspace = true
-copilot.workspace = true
-copilot_chat.workspace = true
-copilot_ui.workspace = true
-crashes.workspace = true
 dap_adapters.workspace = true
 db.workspace = true
 debug_adapter_extension.workspace = true
 debugger_tools.workspace = true
 debugger_ui.workspace = true
-dev_container.workspace = true
 diagnostics.workspace = true
 editor.workspace = true
 encoding_selector.workspace = true
@@ -118,7 +75,7 @@ fs.workspace = true
 futures.workspace = true
 git.workspace = true
 git_hosting_providers.workspace = true
-git_ui = { workspace = true, features = ["call"] }
+git_ui.workspace = true
 git_ui_core.workspace = true
 go_to_line.workspace = true
 gpui = { workspace = true, features = ["profiler", "stacker"] }
@@ -129,7 +86,6 @@ gpui_platform = { workspace = true, features = [
     "x11",
 ] }
 gpui_tokio.workspace = true
-hang_telemetry.workspace = true
 image = { workspace = true, optional = true }
 itertools.workspace = true
 rayon.workspace = true
@@ -138,8 +94,6 @@ system_specs.workspace = true
 tabular_data_preview.workspace = true
 tempfile = { workspace = true, optional = true }
 
-edit_prediction.workspace = true
-edit_prediction_ui.workspace = true
 http_client.workspace = true
 image_viewer.workspace = true
 input_latency_ui.workspace = true
@@ -150,8 +104,6 @@ json_schema_store.workspace = true
 keymap_editor.workspace = true
 language.workspace = true
 language_extension.workspace = true
-language_model.workspace = true
-language_models.workspace = true
 language_onboarding.workspace = true
 language_selector.workspace = true
 language_tools.workspace = true
@@ -178,16 +130,13 @@ profiling.workspace = true
 project.workspace = true
 project_panel.workspace = true
 project_symbols.workspace = true
-prompt_store.workspace = true
 proto.workspace = true
 recent_projects.workspace = true
 release_channel.workspace = true
-remote.workspace = true
 repl.workspace = true
 reqwest = { workspace = true, features = ["multipart"] }
 reqwest_client.workspace = true
 rope.workspace = true
-sandbox.workspace = true
 search.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -196,7 +145,6 @@ settings.workspace = true
 settings_profile_selector.workspace = true
 settings_ui.workspace = true
 shellexpand.workspace = true
-sidebar.workspace = true
 smol.workspace = true
 snippet_provider.workspace = true
 snippets_ui.workspace = true
@@ -204,8 +152,6 @@ svg_preview.workspace = true
 sysinfo.workspace = true
 tab_switcher.workspace = true
 tasks_ui.workspace = true
-telemetry.workspace = true
-telemetry_events.workspace = true
 terminal_view.workspace = true
 theme.workspace = true
 theme_extension.workspace = true
@@ -225,12 +171,9 @@ uuid.workspace = true
 vim.workspace = true
 vim_mode_setting.workspace = true
 watch.workspace = true
-web_search.workspace = true
-web_search_providers.workspace = true
 which_key.workspace = true
 workspace.workspace = true
 zed_actions.workspace = true
-zed_credentials_provider.workspace = true
 zed_env_vars.workspace = true
 zlog.workspace = true
 zlog_settings.workspace = true
@@ -262,7 +205,6 @@ pkg-config = "0.3.22"
 
 [dev-dependencies]
 activity_indicator = { workspace = true, features = ["test-support"] }
-call = { workspace = true, features = ["test-support"] }
 editor = { workspace = true, features = ["test-support"] }
 env_logger.workspace = true
 fs = { workspace = true, features = ["test-support"] }
@@ -272,53 +214,50 @@ itertools.workspace = true
 language = { workspace = true, features = ["test-support"] }
 pretty_assertions.workspace = true
 project = { workspace = true, features = ["test-support"] }
-remote = { workspace = true, features = ["test-support"] }
-remote_server = { workspace = true, features = ["test-support"] }
 semver.workspace = true
 terminal_view = { workspace = true, features = ["test-support"] }
 title_bar = { workspace = true, features = ["test-support"] }
 workspace = { workspace = true, features = ["test-support"] }
 image.workspace = true
-agent_ui = { workspace = true, features = ["test-support"] }
 search = { workspace = true, features = ["test-support"] }
 repl = { workspace = true, features = ["test-support"] }
 
 
 [package.metadata.bundle-dev]
 icon = ["resources/app-icon-dev@2x.png", "resources/app-icon-dev.png"]
-identifier = "dev.zed.Zed-Dev"
-name = "Zed Dev"
+identifier = "io.github.tianjianjun0727.zed-lite-dev"
+name = "Zed Lite Dev"
 category = "Developer Tool"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["zed-lite"]
 
 [package.metadata.bundle-nightly]
 icon = ["resources/app-icon-nightly@2x.png", "resources/app-icon-nightly.png"]
-identifier = "dev.zed.Zed-Nightly"
-name = "Zed Nightly"
+identifier = "io.github.tianjianjun0727.zed-lite-nightly"
+name = "Zed Lite Nightly"
 category = "Developer Tool"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["zed-lite"]
 
 [package.metadata.bundle-preview]
 icon = ["resources/app-icon-preview@2x.png", "resources/app-icon-preview.png"]
-identifier = "dev.zed.Zed-Preview"
-name = "Zed Preview"
+identifier = "io.github.tianjianjun0727.zed-lite-preview"
+name = "Zed Lite Preview"
 category = "Developer Tool"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["zed-lite"]
 
 [package.metadata.bundle-stable]
 icon = ["resources/app-icon@2x.png", "resources/app-icon.png"]
-identifier = "dev.zed.Zed"
-name = "Zed"
+identifier = "io.github.tianjianjun0727.zed-lite"
+name = "Zed Lite"
 category = "Developer Tool"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["zed-lite"]
 
 [package.metadata.cargo-shear]
 ignored = ["profiling", "tracing"]

@@ -1,23 +1,14 @@
 use std::sync::Arc;
-use std::time::Duration;
 
-use client::{Client, TelemetrySettings, UserStore, zed_urls};
-use cloud_api_types::Plan;
-use collections::HashMap;
 use fs::Fs;
-use gpui::{Action, Animation, AnimationExt, App, Entity, IntoElement, TaskExt, pulsating_between};
-use project::agent_server_store::AllAgentServersSettings;
+use gpui::{Action, App, IntoElement};
 use project::project_settings::ProjectSettings;
-use project::{AgentRegistryStore, RegistryAgent};
-use settings::{
-    BaseKeymap, CustomAgentServerSettings, Settings, SettingsStore, update_settings_file,
-};
+use settings::{BaseKeymap, Settings, update_settings_file};
 use theme::{Appearance, SystemAppearance, ThemeRegistry};
 use theme_settings::{ThemeAppearanceMode, ThemeName, ThemeSelection, ThemeSettings};
 use ui::{
-    AgentSetupButton, Divider, StatefulInteractiveElement, SwitchField, TintColor,
-    ToggleButtonGroup, ToggleButtonGroupSize, ToggleButtonSimple, ToggleButtonWithIcon, Tooltip,
-    prelude::*,
+    Divider, StatefulInteractiveElement, SwitchField, TintColor, ToggleButtonGroup,
+    ToggleButtonGroupSize, ToggleButtonSimple, ToggleButtonWithIcon, Tooltip, prelude::*,
 };
 use vim_mode_setting::VimModeSetting;
 use zed_i18n::t;
@@ -79,12 +70,6 @@ fn render_theme_section(tab_index: &mut isize, cx: &mut App) -> impl IntoElement
                                 mode_names[mode as usize].clone(),
                                 move |_, _, cx| {
                                     write_mode_change(mode, cx);
-
-                                    telemetry::event!(
-                                        "Welcome Theme mode Changed",
-                                        from = theme_mode,
-                                        to = mode
-                                    );
                                 },
                             )
                         }),
@@ -171,11 +156,6 @@ fn render_theme_section(tab_index: &mut isize, cx: &mut App) -> impl IntoElement
 
                             move |_, _, cx| {
                                 write_theme_change(theme_name.clone(), theme_mode, cx);
-                                telemetry::event!(
-                                    "Welcome Theme Changed",
-                                    from = current_theme_name,
-                                    to = theme_name
-                                );
                             }
                         })
                         .map(|this| {
@@ -243,91 +223,6 @@ fn render_theme_section(tab_index: &mut isize, cx: &mut App) -> impl IntoElement
             ),
         });
     }
-}
-
-fn render_telemetry_section(tab_index: &mut isize, cx: &App) -> impl IntoElement {
-    let fs = <dyn Fs>::global(cx);
-
-    v_flex()
-        .gap_4()
-        .child(
-            SwitchField::new(
-                "onboarding-telemetry-metrics",
-                None::<&str>,
-                Some(t!("onboarding.basics_page.telemetry_metrics").into()),
-                if TelemetrySettings::get_global(cx).metrics {
-                    ui::ToggleState::Selected
-                } else {
-                    ui::ToggleState::Unselected
-                },
-                {
-                    let fs = fs.clone();
-                    move |selection, _, cx| {
-                        let enabled = match selection {
-                            ToggleState::Selected => true,
-                            ToggleState::Unselected => false,
-                            ToggleState::Indeterminate => {
-                                return;
-                            }
-                        };
-
-                        update_settings_file(fs.clone(), cx, move |setting, _| {
-                            setting.telemetry.get_or_insert_default().metrics = Some(enabled);
-                        });
-
-                        // This telemetry event shouldn't fire when it's off. If it does we'll be alerted
-                        // and can fix it in a timely manner to respect a user's choice.
-                        telemetry::event!(
-                            "Welcome Page Telemetry Metrics Toggled",
-                            options = if enabled { "on" } else { "off" }
-                        );
-                    }
-                },
-            )
-            .tab_index({
-                *tab_index += 1;
-                *tab_index
-            }),
-        )
-        .child(
-            SwitchField::new(
-                "onboarding-telemetry-crash-reports",
-                None::<&str>,
-                Some(t!("onboarding.basics_page.telemetry_crash").into()),
-                if TelemetrySettings::get_global(cx).diagnostics {
-                    ui::ToggleState::Selected
-                } else {
-                    ui::ToggleState::Unselected
-                },
-                {
-                    let fs = fs.clone();
-                    move |selection, _, cx| {
-                        let enabled = match selection {
-                            ToggleState::Selected => true,
-                            ToggleState::Unselected => false,
-                            ToggleState::Indeterminate => {
-                                return;
-                            }
-                        };
-
-                        update_settings_file(fs.clone(), cx, move |setting, _| {
-                            setting.telemetry.get_or_insert_default().diagnostics = Some(enabled);
-                        });
-
-                        // This telemetry event shouldn't fire when it's off. If it does we'll be alerted
-                        // and can fix it in a timely manner to respect a user's choice.
-                        telemetry::event!(
-                            "Welcome Page Telemetry Diagnostics Toggled",
-                            options = if enabled { "on" } else { "off" }
-                        );
-                    }
-                },
-            )
-            .tab_index({
-                *tab_index += 1;
-                *tab_index
-            }),
-        )
 }
 
 fn render_base_keymap_section(tab_index: &mut isize, cx: &mut App) -> impl IntoElement {
@@ -401,8 +296,6 @@ fn render_base_keymap_section(tab_index: &mut isize, cx: &mut App) -> impl IntoE
         update_settings_file(fs, cx, move |setting, _| {
             setting.base_keymap = Some(keymap_base.into());
         });
-
-        telemetry::event!("Welcome Keymap Changed", keymap = keymap_base);
     }
 }
 
@@ -430,11 +323,6 @@ fn render_vim_mode_switch(tab_index: &mut isize, cx: &mut App) -> impl IntoEleme
                 update_settings_file(fs.clone(), cx, move |setting, _| {
                     setting.vim_mode = Some(vim_mode);
                 });
-
-                telemetry::event!(
-                    "Welcome Vim Mode Toggled",
-                    options = if vim_mode { "on" } else { "off" },
-                );
             }
         },
     )
@@ -471,11 +359,6 @@ fn render_worktree_auto_trust_switch(tab_index: &mut isize, cx: &mut App) -> imp
                 update_settings_file(fs.clone(), cx, move |setting, _| {
                     setting.session.get_or_insert_default().trust_all_worktrees = Some(trust);
                 });
-
-                telemetry::event!(
-                    "Welcome Page Worktree Auto Trust Toggled",
-                    options = if trust { "on" } else { "off" }
-                );
             }
         },
     )
@@ -506,7 +389,6 @@ fn render_setting_import_button(
                 .color(Color::Success)
         })
         .on_click(move |_, window, cx| {
-            telemetry::event!("Welcome Import Settings", import_source = label,);
             window.dispatch_action(action.boxed_clone(), cx);
         })
 }
@@ -548,180 +430,7 @@ fn render_import_settings_section(tab_index: &mut isize, cx: &mut App) -> impl I
         .child(h_flex().gap_1().child(vscode).child(cursor))
 }
 
-pub(crate) const FEATURED_AGENT_IDS: &[&str] =
-    &["claude-acp", "codex-acp", "github-copilot-cli", "cursor"];
-
-fn render_registry_agent_button(
-    agent: &RegistryAgent,
-    installed: bool,
-    cx: &mut App,
-) -> impl IntoElement {
-    let agent_id = agent.id().to_string();
-    let element_id = format!("{}-onboarding", agent_id);
-
-    let icon = match agent.icon_path() {
-        Some(icon_path) => Icon::from_external_svg(icon_path.clone()),
-        None => Icon::new(IconName::Sparkle),
-    }
-    .size(IconSize::XSmall)
-    .color(Color::Muted);
-
-    let fs = <dyn Fs>::global(cx);
-
-    let state_element = if installed {
-        Icon::new(IconName::Check)
-            .size(IconSize::Small)
-            .color(Color::Success)
-            .into_any_element()
-    } else {
-        Label::new(t!("onboarding.basics_page.install"))
-            .size(LabelSize::XSmall)
-            .color(Color::Muted)
-            .into_any_element()
-    };
-
-    AgentSetupButton::new(element_id)
-        .icon(icon)
-        .name(agent.name().clone())
-        .state(state_element)
-        .disabled(installed)
-        .on_click(move |_, window, cx| {
-            telemetry::event!("Welcome Agent Install Clicked", agent = agent_id.as_str());
-            update_settings_file(fs.clone(), cx, {
-                let agent_id = agent_id.clone();
-                move |settings, _| {
-                    let agent_servers = settings.agent_servers.get_or_insert_default();
-                    agent_servers.entry(agent_id).or_insert_with(|| {
-                        CustomAgentServerSettings::Registry {
-                            env: Default::default(),
-                            default_mode: None,
-                            default_config_options: HashMap::default(),
-                            favorite_config_option_values: HashMap::default(),
-                        }
-                    });
-                }
-            });
-            window.dispatch_action(
-                Box::new(zed_actions::agent::SelectAgent {
-                    agent: agent_id.clone(),
-                }),
-                cx,
-            );
-        })
-}
-
-fn render_zed_agent_button(user_store: &Entity<UserStore>, cx: &mut App) -> impl IntoElement {
-    let client = Client::global(cx);
-    let status = *client.status().borrow();
-
-    let plan = user_store.read(cx).plan();
-    let is_free = matches!(plan, Some(Plan::ZedFree) | None);
-    let is_pro = matches!(plan, Some(Plan::ZedPro));
-    let is_trial = matches!(plan, Some(Plan::ZedProTrial));
-
-    let is_signed_out = status.is_signed_out()
-        || matches!(
-            status,
-            client::Status::AuthenticationError | client::Status::ConnectionError
-        );
-    let is_signing_in = status.is_signing_in();
-    let is_signed_in = !is_signed_out;
-
-    let state_element = if is_signed_out {
-        Label::new(t!("onboarding.basics_page.sign_in"))
-            .size(LabelSize::XSmall)
-            .color(Color::Muted)
-            .into_any_element()
-    } else if is_signing_in {
-        Label::new(t!("onboarding.basics_page.signing_in"))
-            .size(LabelSize::XSmall)
-            .color(Color::Muted)
-            .with_animation(
-                "signing-in",
-                Animation::new(Duration::from_secs(2))
-                    .repeat()
-                    .with_easing(pulsating_between(0.4, 0.8)),
-                |label, delta| label.alpha(delta),
-            )
-            .into_any_element()
-    } else if is_signed_in && is_free {
-        Label::new(t!("onboarding.basics_page.start_free_trial"))
-            .size(LabelSize::XSmall)
-            .color(Color::Muted)
-            .into_any_element()
-    } else {
-        Icon::new(IconName::Check)
-            .size(IconSize::Small)
-            .color(Color::Success)
-            .into_any_element()
-    };
-
-    AgentSetupButton::new("zed-agent-onboarding")
-        .icon(
-            Icon::new(IconName::ZedAgent)
-                .size(IconSize::XSmall)
-                .color(Color::Muted),
-        )
-        .name("Zed Agent")
-        .state(state_element)
-        .disabled(is_trial || is_pro)
-        .map(|this| {
-            if is_signed_in && is_free {
-                this.on_click(move |_, _window, cx| {
-                    telemetry::event!("Start Trial Clicked", state = "post-sign-in");
-                    cx.open_url(&zed_urls::start_trial_url(cx))
-                })
-            } else {
-                this.on_click(move |_, _, cx| {
-                    telemetry::event!("Welcome Zed Agent Sign In Clicked");
-                    let client = Client::global(cx);
-                    cx.spawn(async move |cx| client.sign_in_with_optional_connect(true, cx).await)
-                        .detach_and_log_err(cx);
-                })
-            }
-        })
-}
-
-fn render_ai_section(user_store: &Entity<UserStore>, cx: &mut App) -> impl IntoElement {
-    let registry_agents = AgentRegistryStore::try_global(cx)
-        .map(|store| store.read(cx).agents().to_vec())
-        .unwrap_or_default();
-
-    let installed_agents = cx
-        .global::<SettingsStore>()
-        .get::<AllAgentServersSettings>(None)
-        .clone();
-
-    let column_count = 1 + FEATURED_AGENT_IDS.len() as u16;
-
-    let grid = FEATURED_AGENT_IDS.iter().fold(
-        div()
-            .w_full()
-            .mt_1p5()
-            .grid()
-            .grid_cols(column_count)
-            .gap_2()
-            .child(render_zed_agent_button(user_store, cx)),
-        |grid, agent_id| {
-            let Some(agent) = registry_agents
-                .iter()
-                .find(|a| a.id().as_ref() == *agent_id)
-            else {
-                return grid;
-            };
-            let is_installed = installed_agents.contains_key(*agent_id);
-            grid.child(render_registry_agent_button(agent, is_installed, cx))
-        },
-    );
-
-    v_flex()
-        .gap_0p5()
-        .child(Label::new(t!("onboarding.basics_page.agent_setup")))
-        .child(Label::new(t!("onboarding.basics_page.agent_setup_description")).color(Color::Muted))
-        .child(grid)
-}
-
-pub(crate) fn render_basics_page(user_store: &Entity<UserStore>, cx: &mut App) -> impl IntoElement {
+pub(crate) fn render_basics_page(cx: &mut App) -> impl IntoElement {
     let mut tab_index = 0;
 
     v_flex()
@@ -729,10 +438,8 @@ pub(crate) fn render_basics_page(user_store: &Entity<UserStore>, cx: &mut App) -
         .gap_6()
         .child(render_theme_section(&mut tab_index, cx))
         .child(render_base_keymap_section(&mut tab_index, cx))
-        .child(render_ai_section(user_store, cx))
         .child(render_import_settings_section(&mut tab_index, cx))
         .child(render_vim_mode_switch(&mut tab_index, cx))
         .child(render_worktree_auto_trust_switch(&mut tab_index, cx))
         .child(Divider::horizontal().color(ui::DividerColor::BorderVariant))
-        .child(render_telemetry_section(&mut tab_index, cx))
 }

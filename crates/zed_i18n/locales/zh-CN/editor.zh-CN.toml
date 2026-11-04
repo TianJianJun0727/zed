@@ -1,7 +1,6 @@
 _version = 1
 
 [editor.mouse_context_menu]
-add_to_agent_thread = "添加到智能体线程"
 copy = "复制"
 copy_and_trim = "复制并去除缩进"
 evaluate_selection = "对选区求值"

@@ -32,8 +32,6 @@ pub enum PanelEvent {
     Close,
 }
 
-pub use proto::PanelId;
-
 pub trait Panel: Focusable + EventEmitter<PanelEvent> + Render + Sized {
     fn persistent_name() -> &'static str;
     fn panel_key() -> &'static str;
@@ -86,15 +84,9 @@ pub trait Panel: Focusable + EventEmitter<PanelEvent> + Render + Sized {
     fn pane(&self) -> Option<Entity<Pane>> {
         None
     }
-    fn remote_id() -> Option<proto::PanelId> {
-        None
-    }
     fn activation_priority(&self) -> u32;
     fn enabled(&self, _cx: &App) -> bool {
         true
-    }
-    fn is_agent_panel(&self) -> bool {
-        false
     }
     /// Returns metadata describing how to hide this panel's button from the
     /// status bar by writing to user settings. Implementors should return
@@ -114,7 +106,6 @@ pub trait PanelHandle: Send + Sync {
     fn is_zoomed(&self, window: &Window, cx: &App) -> bool;
     fn set_zoomed(&self, zoomed: bool, window: &mut Window, cx: &mut App);
     fn set_active(&self, active: bool, window: &mut Window, cx: &mut App);
-    fn remote_id(&self) -> Option<proto::PanelId>;
     fn pane(&self, cx: &App) -> Option<Entity<Pane>>;
     fn default_size(&self, window: &Window, cx: &App) -> Pixels;
     fn min_size(&self, window: &Window, cx: &App) -> Option<Pixels>;
@@ -133,7 +124,6 @@ pub trait PanelHandle: Send + Sync {
     fn to_any(&self) -> AnyView;
     fn activation_priority(&self, cx: &App) -> u32;
     fn enabled(&self, cx: &App) -> bool;
-    fn is_agent_panel(&self, cx: &App) -> bool;
     fn hide_button_setting(&self, cx: &App) -> Option<HideStatusItem>;
     fn move_to_next_position(&self, window: &mut Window, cx: &mut App) {
         let current_position = self.position(window, cx);
@@ -196,10 +186,6 @@ where
         self.read(cx).pane()
     }
 
-    fn remote_id(&self) -> Option<PanelId> {
-        T::remote_id()
-    }
-
     fn default_size(&self, window: &Window, cx: &App) -> Pixels {
         self.read(cx).default_size(window, cx)
     }
@@ -255,17 +241,12 @@ where
     fn activation_focus_handle(&self, cx: &App) -> FocusHandle {
         self.read(cx).activation_focus_handle(cx)
     }
-
     fn activation_priority(&self, cx: &App) -> u32 {
         self.read(cx).activation_priority()
     }
 
     fn enabled(&self, cx: &App) -> bool {
         self.read(cx).enabled(cx)
-    }
-
-    fn is_agent_panel(&self, cx: &App) -> bool {
-        self.read(cx).is_agent_panel()
     }
 
     fn hide_button_setting(&self, cx: &App) -> Option<HideStatusItem> {
@@ -481,7 +462,6 @@ impl Dock {
                 }
                 cx.emit(Event::ZoomChanged);
                 workspace.dismiss_zoomed_items_to_reveal(Some(position), window, cx);
-                workspace.update_active_view_for_followers(window, cx)
             }
         })
         .detach();
@@ -535,12 +515,6 @@ impl Dock {
         self.panel_entries
             .iter()
             .position(|entry| entry.panel.persistent_name() == ui_name)
-    }
-
-    pub fn panel_index_for_proto_id(&self, panel_id: PanelId) -> Option<usize> {
-        self.panel_entries
-            .iter()
-            .position(|entry| entry.panel.remote_id() == Some(panel_id))
     }
 
     pub fn panel_for_id(&self, panel_id: EntityId) -> Option<&Arc<dyn PanelHandle>> {
@@ -928,12 +902,6 @@ impl Dock {
 
     pub fn panels_len(&self) -> usize {
         self.panel_entries.len()
-    }
-
-    pub fn has_agent_panel(&self, cx: &App) -> bool {
-        self.panel_entries
-            .iter()
-            .any(|entry| entry.panel.is_agent_panel(cx))
     }
 
     pub fn activate_panel(&mut self, panel_ix: usize, window: &mut Window, cx: &mut Context<Self>) {

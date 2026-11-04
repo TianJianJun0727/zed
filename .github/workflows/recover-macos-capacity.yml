@@ -1,0 +1,34 @@
+name: Recover macOS runner capacity
+
+on:
+  workflow_run:
+    workflows: [Zed Lite macOS]
+    branches: [main]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: write
+  checks: read
+
+concurrency:
+  group: macos-capacity-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # This workflow has write permission; always run trusted default-branch code.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Retry only an unstarted capacity failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          REPOSITORY: ${{ github.repository }}
+        run: python3 script/retry-macos-capacity.py --repository "$REPOSITORY" --run-id "$RUN_ID"

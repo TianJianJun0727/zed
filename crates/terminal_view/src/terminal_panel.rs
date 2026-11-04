@@ -1,4 +1,5 @@
 use std::{cmp, path::PathBuf, process::ExitStatus, sync::Arc, time::Duration};
+use zed_i18n::t;
 
 use crate::{
     TerminalView, default_working_directory,
@@ -38,8 +39,6 @@ use workspace::{
 };
 
 use anyhow::{Result, anyhow};
-use zed_actions::assistant::InlineAssist;
-use zed_i18n::t;
 
 const TERMINAL_PANEL_KEY: &str = "TerminalPanel";
 
@@ -59,15 +58,11 @@ pub fn init(cx: &mut App) {
             workspace.register_action(TerminalPanel::new_terminal);
             workspace.register_action(TerminalPanel::open_terminal);
             workspace.register_action(|workspace, _: &ToggleFocus, window, cx| {
-                if is_enabled_in_workspace(workspace, cx) {
-                    workspace.toggle_panel_focus::<TerminalPanel>(window, cx);
-                }
+                workspace.toggle_panel_focus::<TerminalPanel>(window, cx);
             });
             workspace.register_action(|workspace, _: &Toggle, window, cx| {
-                if is_enabled_in_workspace(workspace, cx) {
-                    if !workspace.toggle_panel_focus::<TerminalPanel>(window, cx) {
-                        workspace.close_panel::<TerminalPanel>(window, cx);
-                    }
+                if !workspace.toggle_panel_focus::<TerminalPanel>(window, cx) {
+                    workspace.close_panel::<TerminalPanel>(window, cx);
                 }
             });
         },
@@ -86,7 +81,6 @@ pub struct TerminalPanel {
     restoring: bool,
     _restoration: Task<()>,
     deferred_tasks: HashMap<TaskId, Task<()>>,
-    assistant_enabled: bool,
     active: bool,
 }
 
@@ -106,18 +100,10 @@ impl TerminalPanel {
             restoring: false,
             _restoration: Task::ready(()),
             deferred_tasks: HashMap::default(),
-            assistant_enabled: false,
             active: false,
         };
         terminal_panel.apply_tab_bar_buttons(&terminal_panel.active_pane, cx);
         terminal_panel
-    }
-
-    pub fn set_assistant_enabled(&mut self, enabled: bool, cx: &mut Context<Self>) {
-        self.assistant_enabled = enabled;
-        for pane in self.center.panes() {
-            self.apply_tab_bar_buttons(pane, cx);
-        }
     }
 
     pub(crate) fn apply_tab_bar_buttons(
@@ -125,7 +111,6 @@ impl TerminalPanel {
         terminal_pane: &Entity<Pane>,
         cx: &mut Context<Self>,
     ) {
-        let assistant_enabled = self.assistant_enabled;
         terminal_pane.update(cx, |pane, cx| {
             pane.set_render_tab_bar_buttons(cx, move |pane, window, cx| {
                 let split_context = pane
@@ -173,11 +158,6 @@ impl TerminalPanel {
                                 Some(menu)
                             }),
                     )
-                    .when(assistant_enabled, |this| {
-                        this.when_some(split_context.clone(), |this, focus_handle| {
-                            this.child(InlineAssistTabBarButton { focus_handle })
-                        })
-                    })
                     .child(
                         PopoverMenu::new("terminal-pane-tab-bar-split")
                             .trigger_with_tooltip(
@@ -313,13 +293,7 @@ impl TerminalPanel {
                 .update(cx, |workspace, cx| default_working_directory(workspace, cx))
                 .ok()
                 .flatten();
-            Some(self.add_terminal_shell(
-                false,
-                working_directory,
-                RevealStrategy::Always,
-                window,
-                cx,
-            ))
+            Some(self.add_terminal_shell(working_directory, RevealStrategy::Always, window, cx))
         } else {
             None
         }
@@ -636,7 +610,6 @@ impl TerminalPanel {
         terminal_panel
             .update(cx, |panel, cx| {
                 panel.add_terminal_shell(
-                    action.local,
                     Some(action.working_directory.clone()),
                     RevealStrategy::Always,
                     window,
@@ -658,23 +631,9 @@ impl TerminalPanel {
 
         let project = workspace.read(cx).project().read(cx);
 
-        if project.is_via_collab() {
-            return Task::ready(Err(anyhow!("cannot spawn tasks as a guest")));
-        }
-
-        let remote_client = project.remote_client();
         let is_windows = project.path_style(cx).is_windows();
-        let remote_shell = remote_client
-            .as_ref()
-            .and_then(|remote_client| remote_client.read(cx).shell());
 
-        let shell = if let Some(remote_shell) = remote_shell
-            && task.shell == Shell::System
-        {
-            Shell::Program(remote_shell)
-        } else {
-            task.shell.clone()
-        };
+        let shell = { task.shell.clone() };
 
         let task = prepare_task_for_spawn(task, &shell, is_windows);
 
@@ -765,13 +724,8 @@ impl TerminalPanel {
 
         if center_pane_has_focus && active_center_item_is_terminal {
             let working_directory = default_working_directory(workspace, cx);
-            let local = action.local;
             Self::add_center_terminal(workspace, window, cx, move |project, cx| {
-                if local {
-                    project.create_local_terminal(cx)
-                } else {
-                    project.create_terminal_shell(working_directory, cx)
-                }
+                project.create_terminal_shell(working_directory, cx)
             })
             .detach_and_log_err(cx);
             return;
@@ -784,7 +738,6 @@ impl TerminalPanel {
         terminal_panel
             .update(cx, |this, cx| {
                 this.add_terminal_shell(
-                    action.local,
                     default_working_directory(workspace, cx),
                     RevealStrategy::Always,
                     window,
@@ -859,11 +812,6 @@ impl TerminalPanel {
         ) -> Task<Result<Entity<Terminal>>>
         + 'static,
     ) -> Task<Result<WeakEntity<Terminal>>> {
-        if !is_enabled_in_workspace(workspace, cx) {
-            return Task::ready(Err(anyhow!(
-                "terminal not yet supported for remote projects"
-            )));
-        }
         let project = workspace.project().downgrade();
         cx.spawn_in(window, async move |workspace, cx| {
             let terminal = project.update(cx, create_terminal)?.await?;
@@ -904,9 +852,6 @@ impl TerminalPanel {
     ) -> Task<Result<WeakEntity<Terminal>>> {
         let workspace = self.workspace.clone();
         self.spawn_pending_terminal(window, cx, async move |terminal_panel, cx| {
-            if workspace.update(cx, |workspace, cx| !is_enabled_in_workspace(workspace, cx))? {
-                anyhow::bail!("terminal not yet supported for remote projects");
-            }
             let project = workspace.read_with(cx, |workspace, _| workspace.project().clone())?;
             let terminal = project
                 .update(cx, |project, cx| project.create_terminal_task(task, cx))
@@ -948,7 +893,6 @@ impl TerminalPanel {
 
     fn add_terminal_shell(
         &mut self,
-        force_local: bool,
         cwd: Option<PathBuf>,
         reveal_strategy: RevealStrategy,
         window: &mut Window,
@@ -956,19 +900,10 @@ impl TerminalPanel {
     ) -> Task<Result<WeakEntity<Terminal>>> {
         let workspace = self.workspace.clone();
         self.spawn_pending_terminal(window, cx, async move |terminal_panel, cx| {
-            if workspace.update(cx, |workspace, cx| !is_enabled_in_workspace(workspace, cx))? {
-                anyhow::bail!("terminal not yet supported for collaborative projects");
-            }
             let project = workspace.read_with(cx, |workspace, _| workspace.project().clone())?;
-            let terminal = if force_local {
-                project
-                    .update(cx, |project, cx| project.create_local_terminal(cx))
-                    .await
-            } else {
-                project
-                    .update(cx, |project, cx| project.create_terminal_shell(cwd, cx))
-                    .await
-            };
+            let terminal = project
+                .update(cx, |project, cx| project.create_terminal_shell(cwd, cx))
+                .await;
 
             let pane = terminal_panel
                 .read_with(cx, |terminal_panel, _| terminal_panel.active_pane.clone())?;
@@ -1219,10 +1154,6 @@ impl TerminalPanel {
         self.active_pane.read(cx).items_len() == 0 && self.pending_terminals_to_add == 0
     }
 
-    pub fn assistant_enabled(&self) -> bool {
-        self.assistant_enabled
-    }
-
     /// Returns all panes in the terminal panel.
     pub fn panes(&self) -> Vec<&Entity<Pane>> {
         self.center.panes()
@@ -1250,9 +1181,7 @@ impl TerminalPanel {
     }
 
     fn is_enabled(&self, cx: &App) -> bool {
-        self.workspace
-            .upgrade()
-            .is_some_and(|workspace| is_enabled_in_workspace(workspace.read(cx), cx))
+        self.workspace.upgrade().is_some()
     }
 
     fn activate_pane_in_direction(
@@ -1315,10 +1244,6 @@ pub fn prepare_task_for_spawn(
         args,
         ..task.clone()
     }
-}
-
-fn is_enabled_in_workspace(workspace: &Workspace, cx: &App) -> bool {
-    workspace.project().read(cx).supports_terminal(cx)
 }
 
 pub fn new_terminal_pane(
@@ -1536,8 +1461,6 @@ impl Render for TerminalPanel {
                         workspace.zoomed_item(),
                         None,
                         &workspace::PaneRenderContext {
-                            follower_states: &HashMap::default(),
-                            active_call: workspace.active_call(),
                             active_pane: &self.active_pane,
                             app_state: workspace.app_state(),
                             project: workspace.project(),
@@ -1779,7 +1702,7 @@ impl Panel for TerminalPanel {
                 return;
             };
 
-            this.add_terminal_shell(false, kind, RevealStrategy::Always, window, cx)
+            this.add_terminal_shell(kind, RevealStrategy::Always, window, cx)
                 .detach_and_log_err(cx)
         })
     }
@@ -1873,40 +1796,13 @@ impl workspace::TerminalProvider for TerminalProvider {
     }
 }
 
-#[derive(IntoElement)]
-struct InlineAssistTabBarButton {
-    focus_handle: FocusHandle,
-}
-
-impl RenderOnce for InlineAssistTabBarButton {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let focus_handle = self.focus_handle;
-        IconButton::new("terminal_inline_assistant", IconName::ZedAssistant)
-            .icon_size(IconSize::Small)
-            .on_click({
-                let focus_handle = focus_handle.clone();
-                move |_, window, cx| {
-                    focus_handle.dispatch_action(&InlineAssist::default(), window, cx);
-                }
-            })
-            .tooltip(move |_window, cx| {
-                Tooltip::for_action_in(
-                    t!("terminal_view.panel.inline_assist"),
-                    &InlineAssist::default(),
-                    &focus_handle,
-                    cx,
-                )
-            })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::num::NonZero;
 
     use super::*;
     use crate::persistence::{SerializedPane, SerializedPaneGroup};
-    use gpui::{Modifiers, TestAppContext, UpdateGlobal as _, VisualTestContext};
+    use gpui::{TestAppContext, UpdateGlobal as _, VisualTestContext};
     use pretty_assertions::assert_eq;
     use project::FakeFs;
     use settings::SettingsStore;
@@ -1959,7 +1855,7 @@ mod tests {
             let task = window_handle
                 .update(cx, |_, window, cx| {
                     terminal_panel.update(cx, |panel, cx| {
-                        panel.add_terminal_shell(false, None, RevealStrategy::Always, window, cx)
+                        panel.add_terminal_shell(None, RevealStrategy::Always, window, cx)
                     })
                 })
                 .unwrap();
@@ -2042,13 +1938,7 @@ mod tests {
         window_handle
             .update(cx, |_, window, cx| {
                 terminal_panel.update(cx, |terminal_panel, cx| {
-                    terminal_panel.add_terminal_shell(
-                        false,
-                        None,
-                        RevealStrategy::Always,
-                        window,
-                        cx,
-                    )
+                    terminal_panel.add_terminal_shell(None, RevealStrategy::Always, window, cx)
                 })
             })
             .unwrap()
@@ -2137,7 +2027,7 @@ mod tests {
             .update(cx, |_, window, cx| {
                 terminal_panel.update(cx, |terminal_panel, cx| {
                     let task =
-                        terminal_panel.add_terminal_shell(false, None, RevealStrategy::Never, window, cx);
+                        terminal_panel.add_terminal_shell(None, RevealStrategy::Never, window, cx);
                     assert_eq!(
                         terminal_panel.pending_terminals_to_add, 1,
                         "pending count should be incremented synchronously to avoid double default terminal spawns"
@@ -2177,13 +2067,8 @@ mod tests {
         window_handle
             .update(cx, |_, window, cx| {
                 terminal_panel.update(cx, |terminal_panel, cx| {
-                    let task = terminal_panel.add_terminal_shell(
-                        false,
-                        None,
-                        RevealStrategy::Never,
-                        window,
-                        cx,
-                    );
+                    let task =
+                        terminal_panel.add_terminal_shell(None, RevealStrategy::Never, window, cx);
                     assert_eq!(terminal_panel.pending_terminals_to_add, 1);
                     drop(task);
                 })
@@ -2269,13 +2154,7 @@ mod tests {
             .update(cx, |_, window, cx| {
                 terminal_panel.update(cx, |terminal_panel, cx| {
                     terminal_panel.restoring = true;
-                    terminal_panel.add_terminal_shell(
-                        false,
-                        None,
-                        RevealStrategy::Never,
-                        window,
-                        cx,
-                    )
+                    terminal_panel.add_terminal_shell(None, RevealStrategy::Never, window, cx)
                 })
             })
             .unwrap()
@@ -2338,13 +2217,7 @@ mod tests {
         window_handle
             .update(cx, |_, window, cx| {
                 terminal_panel.update(cx, |terminal_panel, cx| {
-                    terminal_panel.add_terminal_shell(
-                        false,
-                        None,
-                        RevealStrategy::Never,
-                        window,
-                        cx,
-                    )
+                    terminal_panel.add_terminal_shell(None, RevealStrategy::Never, window, cx)
                 })
             })
             .unwrap()
@@ -2411,13 +2284,7 @@ mod tests {
         window_handle
             .update(cx, |_, window, cx| {
                 terminal_panel.update(cx, |terminal_panel, cx| {
-                    terminal_panel.add_terminal_shell(
-                        false,
-                        None,
-                        RevealStrategy::Never,
-                        window,
-                        cx,
-                    )
+                    terminal_panel.add_terminal_shell(None, RevealStrategy::Never, window, cx)
                 })
             })
             .unwrap()
@@ -2497,13 +2364,7 @@ mod tests {
         let result = window_handle
             .update(cx, |_, window, cx| {
                 terminal_panel.update(cx, |terminal_panel, cx| {
-                    terminal_panel.add_terminal_shell(
-                        true,
-                        None,
-                        RevealStrategy::Always,
-                        window,
-                        cx,
-                    )
+                    terminal_panel.add_terminal_shell(None, RevealStrategy::Always, window, cx)
                 })
             })
             .unwrap()
@@ -2657,7 +2518,7 @@ mod tests {
 
         terminal_panel
             .update_in(cx, |terminal_panel, window, cx| {
-                terminal_panel.add_terminal_shell(false, None, RevealStrategy::Always, window, cx)
+                terminal_panel.add_terminal_shell(None, RevealStrategy::Always, window, cx)
             })
             .await
             .expect("Failed to spawn a panel terminal");
@@ -2692,7 +2553,7 @@ mod tests {
 
         terminal_panel
             .update_in(cx, |terminal_panel, window, cx| {
-                terminal_panel.add_terminal_shell(false, None, RevealStrategy::Always, window, cx)
+                terminal_panel.add_terminal_shell(None, RevealStrategy::Always, window, cx)
             })
             .await
             .expect("Failed to spawn a panel terminal");
@@ -2806,7 +2667,7 @@ mod tests {
 
         terminal_panel
             .update_in(cx, |terminal_panel, window, cx| {
-                terminal_panel.add_terminal_shell(false, None, RevealStrategy::Never, window, cx)
+                terminal_panel.add_terminal_shell(None, RevealStrategy::Never, window, cx)
             })
             .await
             .expect("Failed to spawn a panel terminal");
@@ -2855,47 +2716,6 @@ mod tests {
                 "finishing restoration must not steal focus from an active modal"
             );
         });
-    }
-
-    #[gpui::test]
-    async fn test_inline_assist_tooltip_shows_keybinding_of_active_terminal(
-        cx: &mut TestAppContext,
-    ) {
-        cx.executor().allow_parking();
-        init_test(cx);
-
-        cx.update(|cx| {
-            cx.bind_keys([gpui::KeyBinding::new(
-                "ctrl-enter",
-                InlineAssist::default(),
-                Some("Terminal"),
-            )])
-        });
-
-        let (window_handle, terminal_panel) = init_workspace_with_panel(cx).await;
-        let cx = &mut VisualTestContext::from_window(window_handle.into(), cx);
-
-        terminal_panel.update(cx, |panel, cx| panel.set_assistant_enabled(true, cx));
-        terminal_panel
-            .update_in(cx, |panel, window, cx| {
-                panel.add_terminal_shell(false, None, RevealStrategy::Always, window, cx)
-            })
-            .await
-            .unwrap();
-        cx.run_until_parked();
-
-        let button_bounds = cx
-            .debug_bounds("ICON-ZedAssistant")
-            .expect("inline assist button should be rendered in the terminal tab bar");
-        cx.simulate_mouse_move(button_bounds.center(), None, Modifiers::default());
-
-        cx.executor().advance_clock(Duration::from_millis(600));
-        cx.run_until_parked();
-
-        assert!(
-            cx.debug_bounds("KEY_BINDING-enter").is_some(),
-            "tooltip should show the InlineAssist keybinding resolved in the terminal's context"
-        );
     }
 
     // On Windows `echo` is a shell builtin rather than an executable, so spawning it directly fails.
@@ -3130,7 +2950,7 @@ mod tests {
         window_handle
             .update(cx, |_, window, cx| {
                 terminal_panel.update(cx, |panel, cx| {
-                    panel.add_terminal_shell(false, None, RevealStrategy::Always, window, cx)
+                    panel.add_terminal_shell(None, RevealStrategy::Always, window, cx)
                 })
             })
             .expect("Failed to update workspace")
@@ -3198,96 +3018,6 @@ mod tests {
     }
 
     #[gpui::test]
-    async fn test_new_local_terminal_opens_in_center_when_center_terminal_focused(
-        cx: &mut TestAppContext,
-    ) {
-        cx.executor().allow_parking();
-        init_test(cx);
-
-        let (window_handle, terminal_panel) = init_workspace_with_panel(cx).await;
-
-        window_handle
-            .update(cx, |multi_workspace, window, cx| {
-                multi_workspace.workspace().update(cx, |workspace, cx| {
-                    TerminalPanel::add_center_terminal(workspace, window, cx, |project, cx| {
-                        project.create_terminal_shell(None, cx)
-                    })
-                })
-            })
-            .expect("Failed to update workspace")
-            .await
-            .expect("Failed to create center terminal");
-        cx.run_until_parked();
-
-        window_handle
-            .update(cx, |multi_workspace, window, cx| {
-                multi_workspace.workspace().update(cx, |workspace, cx| {
-                    let active_item = workspace
-                        .active_pane()
-                        .read(cx)
-                        .active_item()
-                        .expect("Center pane should have an active item");
-                    let terminal_view = active_item
-                        .downcast::<TerminalView>()
-                        .expect("Active center item should be a TerminalView");
-                    window.focus(&terminal_view.focus_handle(cx), cx);
-                })
-            })
-            .expect("Failed to focus terminal view");
-        cx.run_until_parked();
-
-        let center_items_before = window_handle
-            .read_with(cx, |multi_workspace, cx| {
-                multi_workspace
-                    .workspace()
-                    .read(cx)
-                    .active_pane()
-                    .read(cx)
-                    .items_len()
-            })
-            .expect("Failed to read center pane items");
-        let panel_items_before =
-            terminal_panel.read_with(cx, |panel, cx| panel.active_pane.read(cx).items_len());
-
-        window_handle
-            .update(cx, |multi_workspace, window, cx| {
-                multi_workspace.workspace().update(cx, |workspace, cx| {
-                    TerminalPanel::new_terminal(
-                        workspace,
-                        &workspace::NewTerminal { local: true },
-                        window,
-                        cx,
-                    );
-                })
-            })
-            .expect("Failed to dispatch new_terminal with local=true");
-        cx.run_until_parked();
-
-        let center_items_after = window_handle
-            .read_with(cx, |multi_workspace, cx| {
-                multi_workspace
-                    .workspace()
-                    .read(cx)
-                    .active_pane()
-                    .read(cx)
-                    .items_len()
-            })
-            .expect("Failed to read center pane items");
-        let panel_items_after =
-            terminal_panel.read_with(cx, |panel, cx| panel.active_pane.read(cx).items_len());
-
-        assert_eq!(
-            center_items_after,
-            center_items_before + 1,
-            "New local terminal should be added to the center pane"
-        );
-        assert_eq!(
-            panel_items_after, panel_items_before,
-            "Terminal panel should not gain a new terminal"
-        );
-    }
-
-    #[gpui::test]
     async fn test_new_terminal_opens_in_panel_when_panel_focused_and_center_has_terminal(
         cx: &mut TestAppContext,
     ) {
@@ -3312,7 +3042,7 @@ mod tests {
         window_handle
             .update(cx, |_, window, cx| {
                 terminal_panel.update(cx, |panel, cx| {
-                    panel.add_terminal_shell(false, None, RevealStrategy::Always, window, cx)
+                    panel.add_terminal_shell(None, RevealStrategy::Always, window, cx)
                 })
             })
             .expect("Failed to update workspace")

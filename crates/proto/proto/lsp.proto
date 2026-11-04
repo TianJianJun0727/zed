@@ -16,23 +16,11 @@ message GetDefinitionResponse {
   repeated LocationLink links = 1;
 }
 
-message GetEditPredictionDefinition {
-  uint64 project_id = 1;
-  uint64 buffer_id = 2;
-  Anchor position = 3;
-  repeated VectorClockEntry version = 4;
-}
 
-message GetEditPredictionDefinitionResponse {
-  repeated EditPredictionDefinition definitions = 1;
-}
 
-message EditPredictionDefinition {
-  uint64 worktree_id = 1;
-  string path = 2;
-  PointUtf16 start = 3;
-  PointUtf16 end = 4;
-}
+
+
+
 
 message GetDeclaration {
   uint64 project_id = 1;
@@ -57,16 +45,9 @@ message GetTypeDefinitionResponse {
   repeated LocationLink links = 1;
 }
 
-message GetEditPredictionTypeDefinition {
-  uint64 project_id = 1;
-  uint64 buffer_id = 2;
-  Anchor position = 3;
-  repeated VectorClockEntry version = 4;
-}
 
-message GetEditPredictionTypeDefinitionResponse {
-  repeated EditPredictionDefinition definitions = 1;
-}
+
+
 
 message GetImplementation {
   uint64 project_id = 1;
@@ -107,15 +88,10 @@ message LocationLink {
 }
 
 message DocumentHighlight {
-  Kind kind = 1;
   Anchor start = 2;
   Anchor end = 3;
 
-  enum Kind {
-    Text = 0;
-    Read = 1;
-    Write = 2;
-  }
+
 }
 
 message CallHierarchyItem {
@@ -715,13 +691,8 @@ message CodeAction {
   Anchor start = 2;
   Anchor end = 3;
   bytes lsp_action = 4;
-  Kind kind = 5;
   bool resolved = 6;
-  enum Kind {
-    Action = 0;
-    Command = 1;
-    CodeLens = 2;
-  }
+
 }
 
 message LanguageServer {
@@ -871,13 +842,9 @@ message TraceMessage {
 }
 
 message RpcMessage {
-  Kind kind = 1;
   optional uint64 elapsed_nanos = 2;
 
-  enum Kind {
-    RECEIVED = 0;
-    SENT = 1;
-  }
+
 }
 
 message LspLogTrace {
@@ -1063,8 +1030,6 @@ message LspQuery {
     GetFoldingRanges get_folding_ranges = 17;
     GetDocumentSymbols get_document_symbols = 18;
     GetDocumentLinks get_document_links = 19;
-    GetEditPredictionDefinition get_edit_prediction_definition = 20;
-    GetEditPredictionTypeDefinition get_edit_prediction_type_definition = 21;
     PrepareCallHierarchy prepare_call_hierarchy = 22;
     GetIncomingCalls get_incoming_calls = 23;
     GetOutgoingCalls get_outgoing_calls = 24;
@@ -1096,8 +1061,6 @@ message LspResponse {
     GetFoldingRangesResponse get_folding_ranges_response = 15;
     GetDocumentSymbolsResponse get_document_symbols_response = 16;
     GetDocumentLinksResponse get_document_links_response = 17;
-    GetEditPredictionDefinitionResponse get_edit_prediction_definition_response = 18;
-    GetEditPredictionTypeDefinitionResponse get_edit_prediction_type_definition_response = 19;
     PrepareCallHierarchyResponse prepare_call_hierarchy_response = 20;
     GetIncomingCallsResponse get_incoming_calls_response = 21;
     GetOutgoingCallsResponse get_outgoing_calls_response = 22;

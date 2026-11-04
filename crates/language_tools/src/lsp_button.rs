@@ -9,8 +9,6 @@ use zed_i18n::t;
 
 use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 
-use language::language_settings::{EditPredictionProvider, all_language_settings};
-
 use client::proto;
 use collections::HashSet;
 use editor::{Editor, EditorEvent};
@@ -343,19 +341,14 @@ impl LanguageServerState {
                 continue;
             };
             let server_selector = server_info.server_selector();
-            let is_remote = self
-                .lsp_store
-                .update(cx, |lsp_store, _| lsp_store.as_remote().is_some())
-                .unwrap_or(false);
-            let has_logs = is_remote
-                || self.workspace.upgrade().is_some_and(|workspace| {
-                    let project = workspace.read(cx).project();
-                    lsp_logs.read(cx).has_server_logs(
-                        &server_selector,
-                        &project.downgrade(),
-                        &self.lsp_store,
-                    )
-                });
+            let has_logs = self.workspace.upgrade().is_some_and(|workspace| {
+                let project = workspace.read(cx).project();
+                lsp_logs.read(cx).has_server_logs(
+                    &server_selector,
+                    &project.downgrade(),
+                    &self.lsp_store,
+                )
+            });
 
             let (status_color, status_label) = server_info
                 .binary_status
@@ -1420,7 +1413,7 @@ impl Render for LspButton {
         let is_via_ssh = state
             .workspace
             .upgrade()
-            .map(|workspace| workspace.read(cx).project().read(cx).is_via_remote_server())
+            .map(|workspace| false)
             .unwrap_or(false);
 
         let mut has_errors = false;
@@ -1470,16 +1463,7 @@ impl Render for LspButton {
 
         div().child(
             PopoverMenu::new("lsp-tool")
-                .on_open(Rc::new(move |_window, cx| {
-                    let copilot_enabled = all_language_settings(None, cx).edit_predictions.provider
-                        == EditPredictionProvider::Copilot;
-                    telemetry::event!(
-                        "Toolbar Menu Opened",
-                        name = "Language Servers",
-                        copilot_enabled,
-                        is_via_ssh,
-                    );
-                }))
+                .on_open(Rc::new(move |_window, _cx| {}))
                 .menu(move |_, cx| {
                     lsp_button
                         .read_with(cx, |lsp_button, _| lsp_button.lsp_menu.clone())

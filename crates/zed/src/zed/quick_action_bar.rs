@@ -1,7 +1,6 @@
 mod preview;
 mod repl_menu;
 
-use agent_settings::AgentSettings;
 use editor::actions::{
     AddSelectionAbove, AddSelectionBelow, CodeActionSource, DuplicateLineDown, GoToDiagnostic,
     GoToHunk, GoToPreviousDiagnostic, GoToPreviousHunk, MoveLineDown, MoveLineUp, SelectAll,
@@ -15,10 +14,7 @@ use gpui::{
     FocusHandle, Focusable, InteractiveElement, ParentElement, Render, Styled, Subscription,
     WeakEntity, Window, anchored, deferred, point,
 };
-use project::{
-    DisableAiSettings,
-    project_settings::{DiagnosticSeverity, ProjectSettings},
-};
+use project::project_settings::{DiagnosticSeverity, ProjectSettings};
 use search::{BufferSearchBar, buffer_search};
 use settings::{GitDiffBaseSetting, Settings, SettingsStore, update_settings_file};
 use ui::{
@@ -30,14 +26,13 @@ use workspace::item::ItemBufferKind;
 use workspace::{
     ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView, Workspace, item::ItemHandle,
 };
-use zed_actions::{agent::AddSelectionToThread, assistant::InlineAssist, outline::ToggleOutline};
+use zed_actions::outline::ToggleOutline;
 use zed_i18n::t;
 
 const MAX_CODE_ACTION_MENU_LINES: u32 = 16;
 
 pub struct QuickActionBar {
     _inlay_hints_enabled_subscription: Option<Subscription>,
-    _ai_settings_subscription: Subscription,
     active_item: Option<Box<dyn ItemHandle>>,
     buffer_search_bar: Entity<BufferSearchBar>,
     show: bool,
@@ -52,23 +47,8 @@ impl QuickActionBar {
         workspace: &Workspace,
         cx: &mut Context<Self>,
     ) -> Self {
-        let mut was_agent_enabled = AgentSettings::get_global(cx).enabled(cx);
-        let mut was_agent_button = AgentSettings::get_global(cx).button;
-
-        let ai_settings_subscription = cx.observe_global::<SettingsStore>(move |_, cx| {
-            let agent_settings = AgentSettings::get_global(cx);
-            let is_agent_enabled = agent_settings.enabled(cx);
-
-            if was_agent_enabled != is_agent_enabled || was_agent_button != agent_settings.button {
-                was_agent_enabled = is_agent_enabled;
-                was_agent_button = agent_settings.button;
-                cx.notify();
-            }
-        });
-
         let mut this = Self {
             _inlay_hints_enabled_subscription: None,
-            _ai_settings_subscription: ai_settings_subscription,
             active_item: None,
             buffer_search_bar,
             show: true,
@@ -132,10 +112,6 @@ impl Render for QuickActionBar {
         let show_git_blame_gutter = editor_value.show_git_blame_gutter();
         let auto_signature_help_enabled = editor_value.auto_signature_help_enabled(cx);
         let show_line_numbers = editor_value.line_numbers_enabled(cx);
-        let has_edit_prediction_provider = editor_value.edit_prediction_provider().is_some();
-        let show_edit_predictions = editor_value.edit_predictions_enabled();
-        let edit_predictions_enabled_at_cursor =
-            editor_value.edit_predictions_enabled_at_cursor(cx);
         let supports_minimap = editor_value.supports_minimap(cx);
         let minimap_enabled = supports_minimap && editor_value.minimap().is_some();
         let has_available_code_actions = editor_value.has_available_code_actions_for_selection();
@@ -160,18 +136,6 @@ impl Render for QuickActionBar {
                 },
             )
         });
-
-        let assistant_button = QuickActionBarButton::new(
-            "toggle inline assistant",
-            IconName::ZedAssistant,
-            false,
-            Box::new(InlineAssist::default()),
-            focus_handle,
-            t!("zed.quick_action_bar.inline_assist"),
-            move |_, window, cx| {
-                window.dispatch_action(Box::new(InlineAssist::default()), cx);
-            },
-        );
 
         let code_actions_dropdown = code_action_enabled.then(|| {
             let is_deployed = {
@@ -248,13 +212,7 @@ impl Render for QuickActionBar {
                 .read(cx)
                 .snapshot(cx)
                 .has_diff_hunks();
-            let has_selection = editor.update(cx, |editor, cx| {
-                editor.has_non_empty_selection(&editor.display_snapshot(cx))
-            });
-
             let focus = editor.focus_handle(cx);
-
-            let disable_ai = DisableAiSettings::get_global(cx).disable_ai;
 
             PopoverMenu::new("editor-selections-dropdown")
                 .trigger_with_tooltip(
@@ -297,13 +255,6 @@ impl Render for QuickActionBar {
                                     skip_soft_wrap: true,
                                 }),
                             )
-                            .when(!disable_ai, |this| {
-                                this.separator().action_disabled_when(
-                                    !has_selection,
-                                    t!("zed.quick_action_bar.add_to_agent_thread"),
-                                    Box::new(AddSelectionToThread),
-                                )
-                            })
                             .separator()
                             .action(
                                 t!("zed.quick_action_bar.go_to_symbol"),
@@ -418,7 +369,7 @@ impl Render for QuickActionBar {
                                                 })
                                                 .ok();
                                         }
-                                    }
+                                    },
                                 );
                             }
 
@@ -469,49 +420,26 @@ impl Render for QuickActionBar {
                             }
 
                             if supports_minimap {
-                                menu = menu.toggleable_entry(t!("zed.quick_action_bar.minimap"), minimap_enabled, IconPosition::Start, Some(editor::actions::ToggleMinimap.boxed_clone()), {
-                                    let editor = editor.clone();
-                                    move |window, cx| {
-                                        editor
-                                            .update(cx, |editor, cx| {
-                                                editor.toggle_minimap(
-                                                    &editor::actions::ToggleMinimap,
-                                                    window,
-                                                    cx,
-                                                );
-                                            })
-                                            .ok();
-                                    }
-                                },)
-                            }
-
-                            if has_edit_prediction_provider {
-                                let mut edit_prediction_entry = ContextMenuEntry::new(t!("zed.quick_action_bar.edit_predictions"))
-                                    .toggleable(IconPosition::Start, edit_predictions_enabled_at_cursor && show_edit_predictions)
-                                    .disabled(!edit_predictions_enabled_at_cursor)
-                                    .action(
-                                        editor::actions::ToggleEditPrediction.boxed_clone(),
-                                    ).handler({
+                                menu = menu.toggleable_entry(
+                                    t!("zed.quick_action_bar.minimap"),
+                                    minimap_enabled,
+                                    IconPosition::Start,
+                                    Some(editor::actions::ToggleMinimap.boxed_clone()),
+                                    {
                                         let editor = editor.clone();
                                         move |window, cx| {
                                             editor
                                                 .update(cx, |editor, cx| {
-                                                    editor.toggle_edit_predictions(
-                                                        &editor::actions::ToggleEditPrediction,
+                                                    editor.toggle_minimap(
+                                                        &editor::actions::ToggleMinimap,
                                                         window,
                                                         cx,
                                                     );
                                                 })
                                                 .ok();
                                         }
-                                    });
-                                if !edit_predictions_enabled_at_cursor {
-                                    edit_prediction_entry = edit_prediction_entry.documentation_aside(DocumentationSide::Left, |_| {
-                                        Label::new(t!("zed.quick_action_bar.excluded_files_edit_predictions")).into_any_element()
-                                    });
-                                }
-
-                                menu = menu.item(edit_prediction_entry);
+                                    },
+                                )
                             }
 
                             menu = menu.separator();
@@ -539,25 +467,37 @@ impl Render for QuickActionBar {
                                 );
 
                                 if supports_inline_diagnostics {
-                                    let mut inline_diagnostics_item = ContextMenuEntry::new(t!("zed.quick_action_bar.inline_diagnostics"))
-                                        .toggleable(IconPosition::Start, diagnostics_enabled && inline_diagnostics_enabled)
-                                        .action(ToggleInlineDiagnostics.boxed_clone())
-                                        .handler({
-                                            let editor = editor.clone();
-                                            move |window, cx| {
-                                                editor
-                                                    .update(cx, |editor, cx| {
-                                                        editor.toggle_inline_diagnostics(
-                                                            &ToggleInlineDiagnostics,
-                                                            window,
-                                                            cx,
-                                                        );
-                                                    })
-                                                    .ok();
-                                            }
-                                        });
+                                    let mut inline_diagnostics_item = ContextMenuEntry::new(t!(
+                                        "zed.quick_action_bar.inline_diagnostics"
+                                    ))
+                                    .toggleable(
+                                        IconPosition::Start,
+                                        diagnostics_enabled && inline_diagnostics_enabled,
+                                    )
+                                    .action(ToggleInlineDiagnostics.boxed_clone())
+                                    .handler({
+                                        let editor = editor.clone();
+                                        move |window, cx| {
+                                            editor
+                                                .update(cx, |editor, cx| {
+                                                    editor.toggle_inline_diagnostics(
+                                                        &ToggleInlineDiagnostics,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                })
+                                                .ok();
+                                        }
+                                    });
                                     if !diagnostics_enabled {
-                                        inline_diagnostics_item = inline_diagnostics_item.disabled(true).documentation_aside(DocumentationSide::Left, |_|  Label::new(t!("zed.quick_action_bar.inline_diagnostics_hint")).into_any_element());
+                                        inline_diagnostics_item = inline_diagnostics_item
+                                            .disabled(true)
+                                            .documentation_aside(DocumentationSide::Left, |_| {
+                                                Label::new(t!(
+                                                    "zed.quick_action_bar.inline_diagnostics_hint"
+                                                ))
+                                                .into_any_element()
+                                            });
                                     }
                                     menu = menu.item(inline_diagnostics_item)
                                 }
@@ -661,11 +601,7 @@ impl Render for QuickActionBar {
                                     move |window, cx| {
                                         editor
                                             .update(cx, |editor, cx| {
-                                                editor.toggle_git_blame(
-                                                    &git::Blame,
-                                                    window,
-                                                    cx,
-                                                )
+                                                editor.toggle_git_blame(&git::Blame, window, cx)
                                             })
                                             .ok();
                                     }
@@ -685,10 +621,16 @@ impl Render for QuickActionBar {
                                             } else {
                                                 GitDiffBaseSetting::DefaultBranch
                                             };
-                                            update_settings_file(fs.clone(), cx, move |settings, _| {
-                                                settings.git.get_or_insert_default().diff_base =
-                                                    Some(diff_base);
-                                            });
+                                            update_settings_file(
+                                                fs.clone(),
+                                                cx,
+                                                move |settings, _| {
+                                                    settings
+                                                        .git
+                                                        .get_or_insert_default()
+                                                        .diff_base = Some(diff_base);
+                                                },
+                                            );
                                         }
                                     },
                                 );
@@ -704,8 +646,14 @@ impl Render for QuickActionBar {
                                 {
                                     move |window, cx| {
                                         let new_value = !vim_mode_enabled;
-                                        VimModeSetting::override_global(VimModeSetting(new_value), cx);
-                                        HelixModeSetting::override_global(HelixModeSetting(false), cx);
+                                        VimModeSetting::override_global(
+                                            VimModeSetting(new_value),
+                                            cx,
+                                        );
+                                        HelixModeSetting::override_global(
+                                            HelixModeSetting(false),
+                                            cx,
+                                        );
                                         window.refresh();
                                     }
                                 },
@@ -718,11 +666,14 @@ impl Render for QuickActionBar {
                                 {
                                     move |window, cx| {
                                         let new_value = !helix_mode_enabled;
-                                        HelixModeSetting::override_global(HelixModeSetting(new_value), cx);
+                                        HelixModeSetting::override_global(
+                                            HelixModeSetting(new_value),
+                                            cx,
+                                        );
                                         VimModeSetting::override_global(VimModeSetting(false), cx);
                                         window.refresh();
                                     }
-                                }
+                                },
                             );
 
                             menu
@@ -738,10 +689,6 @@ impl Render for QuickActionBar {
             .children(self.render_repl_menu(cx))
             .children(self.render_preview_button(cx))
             .children(search_button)
-            .when(
-                AgentSettings::get_global(cx).enabled(cx) && AgentSettings::get_global(cx).button,
-                |bar| bar.child(assistant_button),
-            )
             .children(code_actions_dropdown)
             .children(editor_selections_dropdown)
             .child(editor_settings_dropdown)

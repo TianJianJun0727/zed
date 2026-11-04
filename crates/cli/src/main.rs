@@ -31,7 +31,7 @@ use walkdir::WalkDir;
 
 use std::io::IsTerminal;
 
-const URL_PREFIX: [&'static str; 5] = ["zed://", "http://", "https://", "file://", "ssh://"];
+const URL_PREFIX: [&'static str; 5] = ["zed-lite://", "zed://", "http://", "https://", "file://"];
 
 struct Detect;
 
@@ -48,21 +48,21 @@ trait InstalledApp {
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "zed",
+    name = "zed-lite",
     disable_version_flag = true,
-    before_help = "The Zed CLI binary.
-This CLI is a separate binary that invokes Zed.
+    before_help = "The Zed Lite CLI binary.
+This CLI is a separate binary that invokes Zed Lite.
 
 Examples:
-    `zed`
-          Simply opens Zed
-    `zed --foreground`
+    `zed-lite`
+          Simply opens Zed Lite
+    `zed-lite --foreground`
           Runs in foreground (shows all logs)
-    `zed path-to-your-project`
-          Open your project in Zed
-    `zed -n path-to-file `
+    `zed-lite path-to-your-project`
+          Open your project in Zed Lite
+    `zed-lite -n path-to-file `
           Open file/folder in a new window",
-    after_help = "To read from stdin, append '-', e.g. 'ps axf | zed -'"
+    after_help = "To read from stdin, append '-', e.g. 'ps axf | zed-lite -'"
 )]
 struct Args {
     /// Wait for all of the given paths to be opened/closed before exiting.
@@ -87,11 +87,11 @@ struct Args {
     classic: bool,
     /// Sets a custom directory for all user data (e.g., database, extensions, logs).
     /// This overrides the default platform-specific data directory location:
-    #[cfg_attr(target_os = "macos", doc = "`~/Library/Application Support/Zed`.")]
-    #[cfg_attr(target_os = "windows", doc = "`%LOCALAPPDATA%\\Zed`.")]
+    #[cfg_attr(target_os = "macos", doc = "`~/Library/Application Support/Zed Lite`.")]
+    #[cfg_attr(target_os = "windows", doc = "`%LOCALAPPDATA%\\Zed Lite`.")]
     #[cfg_attr(
         not(any(target_os = "windows", target_os = "macos")),
-        doc = "`$XDG_DATA_HOME/zed`."
+        doc = "`$XDG_DATA_HOME/zed-lite`."
     )]
     #[arg(long, value_name = "DIR", value_hint = clap::ValueHint::DirPath)]
     user_data_dir: Option<String>,
@@ -109,31 +109,12 @@ struct Args {
     /// Custom path to Zed.app or the zed binary
     #[arg(long)]
     zed: Option<PathBuf>,
-    /// Run zed in dev-server mode
-    #[arg(long)]
-    dev_server_token: Option<String>,
-    /// The username and WSL distribution to use when opening paths. If not specified,
-    /// Zed will attempt to open the paths directly.
-    ///
-    /// The username is optional, and if not specified, the default user for the distribution
-    /// will be used.
-    ///
-    /// Example: `me@Ubuntu` or `Ubuntu`.
-    ///
-    /// WARN: You should not fill in this field by hand.
-    #[cfg(target_os = "windows")]
-    #[arg(long, value_name = "USER@DISTRO")]
-    wsl: Option<String>,
+
     /// Not supported in Zed CLI, only supported on Zed binary
     /// Will attempt to give the correct command to run
     #[arg(long)]
     system_specs: bool,
-    /// Open the project in a dev container.
-    ///
-    /// Automatically triggers "Reopen in Dev Container" if a `.devcontainer/`
-    /// configuration is found in the project directory.
-    #[arg(long)]
-    dev_container: bool,
+
     /// Pairs of file paths to diff. Can be specified multiple times.
     /// When directories are provided, recurses into them and shows all changed files in a single multi-diff view.
     #[arg(long, action = clap::ArgAction::Append, num_args = 2, value_names = ["OLD_PATH", "NEW_PATH"], value_hint = clap::ValueHint::AnyPath)]
@@ -429,51 +410,6 @@ mod tests {
     }
 }
 
-fn parse_path_in_wsl(source: &str, wsl: &str) -> Result<String> {
-    let mut source = PathWithPosition::parse_str(source);
-
-    let (user, distro_name) = if let Some((user, distro)) = wsl.split_once('@') {
-        if user.is_empty() {
-            anyhow::bail!("user is empty in wsl argument");
-        }
-        (Some(user), distro)
-    } else {
-        (None, wsl)
-    };
-
-    let mut args = vec!["--distribution", distro_name];
-    if let Some(user) = user {
-        args.push("--user");
-        args.push(user);
-    }
-
-    let command = [
-        OsStr::new("realpath"),
-        OsStr::new("-s"),
-        source.path.as_ref(),
-    ];
-
-    let output = util::command::new_std_command("wsl.exe")
-        .args(&args)
-        .arg("--exec")
-        .args(&command)
-        .output()?;
-    let result = if output.status.success() {
-        String::from_utf8_lossy(&output.stdout).to_string()
-    } else {
-        let fallback = util::command::new_std_command("wsl.exe")
-            .args(&args)
-            .arg("--")
-            .args(&command)
-            .output()?;
-        String::from_utf8_lossy(&fallback.stdout).to_string()
-    };
-
-    source.path = Path::new(result.trim()).to_owned();
-
-    Ok(source.to_string(&|path| path.to_string_lossy().into_owned()))
-}
-
 fn main() {
     if let Err(error) = run() {
         eprintln!("error: {error:#}");
@@ -666,11 +602,6 @@ fn run() -> Result<()> {
         let _ = temp_dir.keep();
     }
 
-    #[cfg(target_os = "windows")]
-    let wsl = args.wsl.as_ref();
-    #[cfg(not(target_os = "windows"))]
-    let wsl = None;
-
     for path in args.paths_with_position.iter() {
         if URL_PREFIX.iter().any(|&prefix| path.starts_with(prefix)) {
             urls.push(path.to_string());
@@ -684,17 +615,10 @@ fn run() -> Result<()> {
             paths.push(tmp_file.path().to_string_lossy().into_owned());
             let (tmp_file, _) = tmp_file.keep()?;
             anonymous_fd_tmp_files.push((file, tmp_file));
-        } else if let Some(wsl) = wsl {
-            urls.push(format!("file://{}", parse_path_in_wsl(path, wsl)?));
         } else {
             paths.push(parse_path_with_position(path)?);
         }
     }
-
-    anyhow::ensure!(
-        args.dev_server_token.is_none(),
-        "Dev servers were removed in v0.157.x please upgrade to SSH remoting: https://zed.dev/docs/remote-development"
-    );
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(4)
@@ -712,22 +636,15 @@ fn run() -> Result<()> {
                 let (_, handshake) = server.accept().context("Handshake after Zed spawn")?;
                 let (tx, rx) = (handshake.requests, handshake.responses);
 
-                #[cfg(target_os = "windows")]
-                let wsl = args.wsl;
-                #[cfg(not(target_os = "windows"))]
-                let wsl = None;
-
                 let open_request = CliRequest::Open {
                     paths,
                     urls,
                     diff_paths,
                     diff_all: diff_all_mode,
-                    wsl,
                     wait: args.wait,
                     open_behavior,
                     env,
                     user_data_dir: user_data_dir_for_thread,
-                    dev_container: args.dev_container,
                     cwd: env::current_dir().ok(),
                 };
 
@@ -925,7 +842,7 @@ mod linux {
     impl InstalledApp for App {
         fn zed_version_string(&self) -> String {
             format!(
-                "Zed {}{}{} – {}",
+                "Zed Lite {}{}{} – {}",
                 if *release_channel::RELEASE_CHANNEL_NAME == "stable" {
                     "".to_string()
                 } else {
@@ -1202,7 +1119,7 @@ mod windows {
     impl InstalledApp for App {
         fn zed_version_string(&self) -> String {
             format!(
-                "Zed {}{}{} – {}",
+                "Zed Lite {}{}{} – {}",
                 if *release_channel::RELEASE_CHANNEL_NAME == "stable" {
                     "".to_string()
                 } else {
@@ -1375,7 +1292,7 @@ mod mac_os {
 
     impl InstalledApp for Bundle {
         fn zed_version_string(&self) -> String {
-            format!("Zed {} – {}", self.version(), self.path().display(),)
+            format!("Zed Lite {} – {}", self.version(), self.path().display(),)
         }
 
         fn launch(&self, url: String, user_data_dir: Option<&str>) -> anyhow::Result<()> {
@@ -1452,7 +1369,7 @@ mod mac_os {
             user_data_dir: Option<&str>,
         ) -> io::Result<ExitStatus> {
             let path = match self {
-                Bundle::App { app_bundle, .. } => app_bundle.join("Contents/MacOS/zed"),
+                Bundle::App { app_bundle, .. } => app_bundle.join("Contents/MacOS/zed-lite"),
                 Bundle::LocalPath { executable, .. } => executable.clone(),
             };
 
@@ -1466,7 +1383,7 @@ mod mac_os {
 
         fn path(&self) -> PathBuf {
             match self {
-                Bundle::App { app_bundle, .. } => app_bundle.join("Contents/MacOS/zed"),
+                Bundle::App { app_bundle, .. } => app_bundle.join("Contents/MacOS/zed-lite"),
                 Bundle::LocalPath { executable, .. } => executable.clone(),
             }
         }

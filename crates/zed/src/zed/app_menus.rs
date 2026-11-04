@@ -1,10 +1,7 @@
-use collab_ui::collab_panel;
 use gpui::{App, Menu, MenuItem, OsAction};
-use project::DisableAiSettings;
 use release_channel::ReleaseChannel;
-use settings::Settings;
 use terminal_view::terminal_panel;
-use zed_actions::{Quit, assistant, debug_panel, dev, git_panel, project_panel};
+use zed_actions::{Quit, debug_panel, dev, git_panel, project_panel};
 use zed_i18n::t;
 
 /// 构建应用菜单栏。
@@ -75,20 +72,12 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
             t!("app_menus.view.outline_panel"),
             outline_panel::ToggleFocus,
         ),
-        MenuItem::action(t!("app_menus.view.collab_panel"), collab_panel::ToggleFocus),
         MenuItem::action(t!("app_menus.view.terminal_panel"), terminal_panel::Toggle),
         MenuItem::action(
             t!("app_menus.view.debugger_panel"),
             debug_panel::ToggleFocus,
         ),
     ];
-
-    if !DisableAiSettings::get_global(cx).disable_ai {
-        view_items.push(MenuItem::action(
-            t!("app_menus.view.agent_panel"),
-            assistant::ToggleFocus,
-        ));
-    }
 
     view_items.extend([
         MenuItem::action(t!("app_menus.view.git_panel"), git_panel::ToggleFocus),
@@ -195,10 +184,6 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                 MenuItem::action(
                     t!("app_menus.file.open_recent"),
                     zed_actions::OpenRecent::default(),
-                ),
-                MenuItem::action(
-                    t!("app_menus.file.open_remote"),
-                    zed_actions::OpenRemote::default(),
                 ),
                 MenuItem::separator(),
                 MenuItem::action(
@@ -469,10 +454,6 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                     t!("app_menus.help.release_notes"),
                     auto_update_ui::ViewReleaseNotesLocally,
                 ),
-                MenuItem::action(
-                    t!("app_menus.help.telemetry"),
-                    zed_actions::OpenTelemetryLog,
-                ),
                 MenuItem::action(t!("app_menus.help.licenses"), zed_actions::OpenLicenses),
                 MenuItem::action(t!("app_menus.help.welcome"), onboarding::ShowWelcome),
                 MenuItem::separator(),
@@ -484,7 +465,6 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                     t!("app_menus.help.request_feature"),
                     zed_actions::feedback::RequestFeature,
                 ),
-                MenuItem::action(t!("app_menus.help.email"), zed_actions::feedback::EmailZed),
                 MenuItem::separator(),
                 MenuItem::action(
                     t!("app_menus.help.documentation"),

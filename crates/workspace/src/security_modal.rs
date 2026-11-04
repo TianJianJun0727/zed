@@ -14,7 +14,7 @@ use gpui::{
 
 use project::{
     WorktreeId,
-    trusted_worktrees::{PathTrust, RemoteHostLocation, TrustedWorktrees},
+    trusted_worktrees::{PathTrust, TrustedWorktrees},
     worktree_store::WorktreeStore,
 };
 use smallvec::SmallVec;
@@ -35,7 +35,6 @@ pub struct SecurityModal {
     _home_dir_task: Task<()>,
     trust_parents: bool,
     worktree_store: WeakEntity<WorktreeStore>,
-    remote_host: Option<RemoteHostLocation>,
     focus_handle: FocusHandle,
     project_list_scroll_handle: ScrollHandle,
     trusted: Option<bool>,
@@ -48,7 +47,6 @@ pub struct SecurityModal {
 struct RestrictedPath {
     abs_path: Arc<Path>,
     is_file: bool,
-    host: Option<RemoteHostLocation>,
 }
 
 impl Focusable for SecurityModal {
@@ -66,14 +64,8 @@ impl ModalView for SecurityModal {
 
     fn on_before_dismiss(&mut self, _: &mut Window, _: &mut Context<Self>) -> DismissDecision {
         match self.trusted {
-            Some(false) => {
-                telemetry::event!("Open in Restricted", source = "Worktree Trust Modal");
-                DismissDecision::Dismiss(true)
-            }
-            Some(true) => {
-                telemetry::event!("Trust and Continue", source = "Worktree Trust Modal");
-                DismissDecision::Dismiss(true)
-            }
+            Some(false) => DismissDecision::Dismiss(true),
+            Some(true) => DismissDecision::Dismiss(true),
             // Block dismiss via escape or clicking outside; user must pick an action
             None => DismissDecision::Dismiss(false),
         }
@@ -89,16 +81,20 @@ impl Render for SecurityModal {
 
         let restricted_count = self.restricted_paths.len();
         let header_label: SharedString = if restricted_count == 1 {
-            "Unrecognized Project".into()
+            t!("workspace.security_modal.unrecognized_project").into()
         } else {
-            format!("Unrecognized Projects ({})", restricted_count).into()
+            t!(
+                "workspace.security_modal.unrecognized_projects",
+                count = restricted_count
+            )
+            .into()
         };
 
         let path_style = self.path_style(cx);
         let trust_label = self.build_trust_label(path_style);
 
         // The editable trust-scope field is shown only when a single project is
-        // being prompted for (Delta opens one worktree per thread).
+        // being prompted for.
         let trust_input = self
             .single_trustable_path()
             .is_some()
@@ -148,27 +144,10 @@ impl Render for SecurityModal {
                                             } else {
                                                 Some(restricted_path.abs_path.as_ref())
                                             }?;
-                                            let label = match &restricted_path.host {
-                                                Some(remote_host) => match &remote_host.user_name {
-                                                    Some(user_name) => format!(
-                                                        "{} ({}@{})",
-                                                        self.shorten_path(abs_path, path_style)
-                                                            .display(),
-                                                        user_name,
-                                                        remote_host.host_identifier
-                                                    ),
-                                                    None => format!(
-                                                        "{} ({})",
-                                                        self.shorten_path(abs_path, path_style)
-                                                            .display(),
-                                                        remote_host.host_identifier
-                                                    ),
-                                                },
-                                                None => self
-                                                    .shorten_path(abs_path, path_style)
-                                                    .display()
-                                                    .to_string(),
-                                            };
+                                            let label = self
+                                                .shorten_path(abs_path, path_style)
+                                                .display()
+                                                .to_string();
                                             Some(
                                                 h_flex()
                                                     .pl(IconSize::default().rems() + rems(0.5))
@@ -204,9 +183,6 @@ impl Render for SecurityModal {
                             )))
                             .child(ListBulletItem::new(t!(
                                 "workspace.security_modal.language_servers_from_running"
-                            )))
-                            .child(ListBulletItem::new(t!(
-                                "workspace.security_modal.mcp_server_integrations_from_installing"
                             ))),
                     )
                     .map(|this| {
@@ -318,7 +294,6 @@ impl Render for SecurityModal {
 impl SecurityModal {
     pub fn new(
         worktree_store: WeakEntity<WorktreeStore>,
-        remote_host: Option<impl Into<RemoteHostLocation>>,
         home_dir_task: Task<Option<PathBuf>>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -335,7 +310,6 @@ impl SecurityModal {
         });
         let mut this = Self {
             worktree_store,
-            remote_host: remote_host.map(|host| host.into()),
             restricted_paths: HashMap::default(),
             focus_handle: cx.focus_handle(),
             project_list_scroll_handle: ScrollHandle::new(),
@@ -379,17 +353,20 @@ impl SecurityModal {
         match available_parents.len() {
             0 => {
                 if has_restricted_files {
-                    Some(Cow::Borrowed("Trust all single files"))
+                    Some(t!("workspace.security_modal.trust_all_single_files"))
                 } else {
                     None
                 }
             }
-            1 => Some(Cow::Owned(format!(
-                "Trust all projects in the {:} folder",
-                self.shorten_path(available_parents[0], path_style)
+            1 => Some(Cow::Owned(t!(
+                "workspace.security_modal.trust_projects_in_folder",
+                path = self
+                    .shorten_path(available_parents[0], path_style)
                     .display()
             ))),
-            _ => Some(Cow::Borrowed("Trust all projects in the parent folders")),
+            _ => Some(t!(
+                "workspace.security_modal.trust_projects_in_parent_folders"
+            )),
         }
     }
 
@@ -479,8 +456,7 @@ impl SecurityModal {
     }
 
     /// The sole untrusted, non-file project, when exactly one is being prompted
-    /// for. This is the case where the trust scope can be edited (Delta opens
-    /// one worktree per thread); with zero or several we keep the static label.
+    /// for. This is the case where the trust scope can be edited; with zero or several we keep the static label.
     fn single_trustable_path(&self) -> Option<Arc<Path>> {
         let mut projects = self
             .restricted_paths
@@ -505,7 +481,6 @@ impl SecurityModal {
                             RestrictedPath {
                                 abs_path,
                                 is_file: worktree.read(cx).is_single_file(),
-                                host: self.remote_host.clone(),
                             },
                         ))
                     })
@@ -540,10 +515,10 @@ fn validate_trust_scope(
 ) -> Result<PathBuf, SharedString> {
     let trimmed = typed.trim();
     if trimmed.is_empty() {
-        return Err("Enter a folder to trust".into());
+        return Err(t!("workspace.security_modal.enter_folder").into());
     }
     if home_dir.is_none() && trimmed.starts_with('~') {
-        return Err("Home directory not available".into());
+        return Err(t!("workspace.security_modal.home_unavailable").into());
     }
     let expanded = match (trimmed.strip_prefix('~'), home_dir) {
         (Some(rest), Some(home_dir)) => {
@@ -559,11 +534,11 @@ fn validate_trust_scope(
         _ => PathBuf::from(trimmed),
     };
     if !path_style.is_absolute(&expanded) {
-        return Err("Enter an absolute folder path".into());
+        return Err(t!("workspace.security_modal.enter_absolute_folder").into());
     }
 
     if !path_style.starts_with(project, expanded.as_path()) {
-        return Err("Must be a parent folder of the project".into());
+        return Err(t!("workspace.security_modal.must_be_parent").into());
     }
     Ok(expanded)
 }

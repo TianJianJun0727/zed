@@ -132,9 +132,7 @@ pub fn init(cx: &mut App) {
                         ExtensionCategoryFilter::LanguageServers => {
                             ExtensionProvides::LanguageServers
                         }
-                        ExtensionCategoryFilter::ContextServers => {
-                            ExtensionProvides::ContextServers
-                        }
+
                         ExtensionCategoryFilter::Snippets => ExtensionProvides::Snippets,
                         ExtensionCategoryFilter::DebugAdapters => ExtensionProvides::DebugAdapters,
                     });
@@ -301,9 +299,6 @@ enum ExtensionFilter {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 enum Feature {
-    AgentClaude,
-    AgentCodex,
-    AgentGemini,
     ExtensionBasedpyright,
     ExtensionRuff,
     ExtensionTailwind,
@@ -325,12 +320,6 @@ fn keywords_by_feature() -> &'static BTreeMap<Feature, Vec<&'static str>> {
     static KEYWORDS_BY_FEATURE: OnceLock<BTreeMap<Feature, Vec<&'static str>>> = OnceLock::new();
     KEYWORDS_BY_FEATURE.get_or_init(|| {
         BTreeMap::from_iter([
-            (
-                Feature::AgentClaude,
-                vec!["claude", "claude code", "claude agent"],
-            ),
-            (Feature::AgentCodex, vec!["codex", "codex cli"]),
-            (Feature::AgentGemini, vec!["gemini", "gemini cli"]),
             (
                 Feature::ExtensionBasedpyright,
                 vec!["basedpyright", "pyright"],
@@ -664,7 +653,14 @@ impl ExtensionsPage {
         cx: &mut Context<Self>,
     ) {
         let search = self.search_query(cx);
-        let provides_filter = BTreeSet::from_iter(self.provides_filter);
+        let provides_filter = self
+            .provides_filter
+            .map(|provides| BTreeSet::from([provides]))
+            .unwrap_or_else(|| {
+                ExtensionProvides::iter()
+                    .filter(ExtensionProvides::is_supported)
+                    .collect()
+            });
         self.fetch_state = ExtensionFetchState::Fetching;
         cx.notify();
 
@@ -711,7 +707,16 @@ impl ExtensionsPage {
                 match fetch_result {
                     Ok(remote_extensions) => {
                         this.fetch_state = ExtensionFetchState::Succeeded;
-                        this.remote_extensions = remote_extensions;
+                        this.remote_extensions = remote_extensions
+                            .into_iter()
+                            .filter(|extension| {
+                                extension
+                                    .manifest
+                                    .provides
+                                    .iter()
+                                    .any(ExtensionProvides::is_supported)
+                            })
+                            .collect();
                     }
                     Err(error) => {
                         log::error!("failed to fetch extensions: {error:#}");
@@ -1139,16 +1144,7 @@ impl ExtensionsPage {
         let docs_url_button =
             Button::new("open_docs", t!("extensions_ui.upsell.view_documentation"))
                 .end_icon(Icon::new(IconName::ArrowUpRight).size(IconSize::Small))
-                .on_click({
-                    move |_event, _window, cx| {
-                        telemetry::event!(
-                            "Documentation Viewed",
-                            source = "Feature Upsell",
-                            url = docs_url,
-                        );
-                        cx.open_url(docs_url)
-                    }
-                });
+                .on_click({ move |_event, _window, cx| cx.open_url(docs_url) });
 
         div()
             .pt_4()
@@ -1182,10 +1178,6 @@ impl ExtensionsPage {
                                                 )
                                                 .on_click(cx.listener(
                                                     move |this, selection, _, cx| {
-                                                        telemetry::event!(
-                                                            "Vim Mode Toggled",
-                                                            source = "Feature Upsell"
-                                                        );
                                                         this.update_settings(
                                                             selection,
                                                             cx,
@@ -1208,24 +1200,6 @@ impl ExtensionsPage {
 
     fn render_feature_upsells(&self, cx: &Context<Self>) -> impl IntoElement {
         v_flex().children(self.upsells.iter().map(|feature| match feature {
-            Feature::AgentClaude => self.render_feature_upsell_banner(
-                t!("extensions_ui.upsell.agent_claude").into(),
-                "https://zed.dev/docs/ai/external-agents#claude-agent",
-                false,
-                cx,
-            ),
-            Feature::AgentCodex => self.render_feature_upsell_banner(
-                t!("extensions_ui.upsell.agent_codex").into(),
-                "https://zed.dev/docs/ai/external-agents#codex-cli",
-                false,
-                cx,
-            ),
-            Feature::AgentGemini => self.render_feature_upsell_banner(
-                t!("extensions_ui.upsell.agent_gemini").into(),
-                "https://zed.dev/docs/ai/external-agents#gemini-cli",
-                false,
-                cx,
-            ),
             Feature::ExtensionBasedpyright => self.render_feature_upsell_banner(
                 t!("extensions_ui.upsell.basedpyright").into(),
                 "https://zed.dev/docs/languages/python#basedpyright",
@@ -1592,15 +1566,13 @@ impl Render for ExtensionsPage {
                     )
                     .children(
                         ExtensionProvides::iter()
-                            .filter(|provides| match provides {
-                                ExtensionProvides::AgentServers
-                                | ExtensionProvides::Grammars // grammars do not add anything of value to users currently
-                                | ExtensionProvides::IndexedDocsProviders
-                                | ExtensionProvides::SlashCommands => false,
-                                _ => true,
+                            .filter(|provides| {
+                                provides.is_supported() && *provides != ExtensionProvides::Grammars
                             })
-                            .map(|provides| {
-                                let label = extension_provides_label(provides);
+                            .filter_map(|provides| {
+                                extension_provides_label(provides).map(|label| (provides, label))
+                            })
+                            .map(|(provides, label)| {
                                 let button_id =
                                     SharedString::from(format!("filter-category-{}", label));
 
@@ -1672,10 +1644,6 @@ impl Item for ExtensionsPage {
 
     fn tab_content_text(&self, _detail: usize, _cx: &App) -> SharedString {
         t!("extensions_ui.page.title").into()
-    }
-
-    fn telemetry_event_text(&self) -> Option<&'static str> {
-        Some("Extensions Page Opened")
     }
 
     fn show_toolbar(&self) -> bool {

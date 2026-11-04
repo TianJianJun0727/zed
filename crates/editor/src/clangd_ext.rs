@@ -36,7 +36,7 @@ pub fn switch_source_header(
         return;
     };
     let project = project.clone();
-    let upstream_client = project.read(cx).lsp_store().read(cx).upstream_client();
+
     cx.spawn_in(window, async move |_editor, cx| {
         let source_file = buffer.read_with(cx, |buffer, _| {
             buffer
@@ -46,19 +46,7 @@ pub fn switch_source_header(
                 .unwrap_or_else(|| "Unknown".to_string())
         });
 
-        let switch_source_header = if let Some((client, project_id)) = upstream_client {
-            let buffer_id = buffer.read_with(cx, |buffer, _| buffer.remote_id());
-            let request = proto::LspExtSwitchSourceHeader {
-                project_id,
-                buffer_id: buffer_id.to_proto(),
-                server_id: server_to_query.to_proto(),
-            };
-            let response = client
-                .request(request)
-                .await
-                .context("lsp ext switch source header proto request")?;
-            SwitchSourceHeaderResult(response.target_file)
-        } else {
+        let switch_source_header = {
             project
                 .update(cx, |project, cx| {
                     project.request_lsp(

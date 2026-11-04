@@ -20,7 +20,6 @@ paste_text = "Paste Text"
 select_all = "Select All"
 clear = "Clear"
 inline_assist = "Inline Assist"
-add_to_agent_thread = "Add to Agent Thread"
 close_terminal_tab = "Close Terminal Tab"
 
 [terminal_view.panel]

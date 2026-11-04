@@ -1,9 +1,6 @@
 use gpui::{Action as _, App, SharedString};
 use itertools::Itertools as _;
-use settings::{
-    AudioInputDeviceName, AudioOutputDeviceName, EditPredictionDataCollectionChoice,
-    LanguageSettingsContent, SemanticTokens, SettingsContent,
-};
+use settings::{LanguageSettingsContent, SemanticTokens, SettingsContent};
 use std::sync::{Arc, OnceLock};
 use strum::{EnumMessage, IntoDiscriminant as _, VariantArray};
 use theme::SystemAppearance;
@@ -13,22 +10,12 @@ use zed_i18n::t;
 use crate::{
     ActionLink, DynamicItem, PROJECT, SettingField, SettingItem, SettingsFieldMetadata,
     SettingsPage, SettingsPageItem, SubPageLink, USER, active_language, all_language_names,
-    pages::{
-        open_audio_test_window, render_edit_prediction_setup_page, render_external_agents_page,
-        render_llm_providers_page, render_mcp_servers_page, render_sandbox_settings_page,
-        render_skills_setup_page, render_tool_permissions_setup_page,
-    },
 };
 
 const DEFAULT_STRING: String = String::new();
 /// A default empty string reference. Useful in `pick` functions for cases either in dynamic item fields, or when dealing with `settings::Maybe`
 /// to avoid the "NO DEFAULT" case.
 const DEFAULT_EMPTY_STRING: Option<&String> = Some(&DEFAULT_STRING);
-
-const DEFAULT_AUDIO_OUTPUT: AudioOutputDeviceName = AudioOutputDeviceName(None);
-const DEFAULT_EMPTY_AUDIO_OUTPUT: Option<&AudioOutputDeviceName> = Some(&DEFAULT_AUDIO_OUTPUT);
-const DEFAULT_AUDIO_INPUT: AudioInputDeviceName = AudioInputDeviceName(None);
-const DEFAULT_EMPTY_AUDIO_INPUT: Option<&AudioInputDeviceName> = Some(&DEFAULT_AUDIO_INPUT);
 
 macro_rules! concat_sections {
     (@vec, $($arr:expr),+ $(,)?) => {{
@@ -76,8 +63,6 @@ pub(crate) fn settings_data(cx: &App) -> Vec<SettingsPage> {
         debugger_page(),
         terminal_page(),
         version_control_page(),
-        collaboration_page(),
-        ai_page(cx),
         network_page(),
         developer_page(cx),
     ]
@@ -116,7 +101,6 @@ fn developer_page(cx: &App) -> SettingsPage {
         )
         .into(),
         field: Box::new(SettingField {
-            organization_override: None,
             json_path: Some("instrumentation.performance_profiler.enabled"),
             pick: |settings_content| {
                 settings_content
@@ -154,7 +138,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.ui_language_title").into(),
                 description: t!("settings_ui.page_data.ui_language_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("ui_language"),
                     pick: |settings_content| settings_content.ui_language.as_ref(),
                     write: |settings_content, value, _| {
@@ -173,7 +156,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.accessible_mode_title").into(),
                 description: t!("settings_ui.page_data.accessible_mode_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("accessible_mode"),
                     pick: |settings_content| settings_content.workspace.accessible_mode.as_ref(),
                     write: |settings_content, value, _| {
@@ -188,7 +170,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.when_closing_with_no_tabs_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("when_closing_with_no_tabs"),
                     pick: |settings_content| {
                         settings_content
@@ -207,7 +188,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.on_new_window_title").into(),
                 description: t!("settings_ui.page_data.on_new_window_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("on_new_window"),
                     pick: |settings_content| settings_content.workspace.on_new_window.as_ref(),
                     write: |settings_content, value, _| {
@@ -221,7 +201,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.on_last_window_closed_title").into(),
                 description: t!("settings_ui.page_data.on_last_window_closed_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("on_last_window_closed"),
                     pick: |settings_content| {
                         settings_content.workspace.on_last_window_closed.as_ref()
@@ -237,7 +216,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.use_system_path_prompts_title").into(),
                 description: t!("settings_ui.page_data.use_system_path_prompts_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("use_system_path_prompts"),
                     pick: |settings_content| {
                         settings_content.workspace.use_system_path_prompts.as_ref()
@@ -253,7 +231,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.use_system_prompts_title").into(),
                 description: t!("settings_ui.page_data.use_system_prompts_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("use_system_prompts"),
                     pick: |settings_content| settings_content.workspace.use_system_prompts.as_ref(),
                     write: |settings_content, value, _| {
@@ -267,7 +244,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.redact_private_values_title").into(),
                 description: t!("settings_ui.page_data.redact_private_values_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("redact_private_values"),
                     pick: |settings_content| settings_content.editor.redact_private_values.as_ref(),
                     write: |settings_content, value, _| {
@@ -282,7 +258,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.worktree_private_files_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("private_files"),
                         pick: |settings_content| {
                             settings_content.project.worktree.private_files.as_ref()
@@ -301,7 +276,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.cli_default_open_behavior_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("cli_default_open_behavior"),
                     pick: |settings_content| {
                         settings_content
@@ -323,7 +297,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.reveal_if_open_title").into(),
                 description: t!("settings_ui.page_data.reveal_if_open_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("reveal_if_open"),
                     pick: |settings_content| settings_content.workspace.reveal_if_open.as_ref(),
                     write: |settings_content, value, _| {
@@ -337,7 +310,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.default_open_behavior_title").into(),
                 description: t!("settings_ui.page_data.default_open_behavior_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("default_open_behavior"),
                     pick: |settings_content| {
                         settings_content.workspace.default_open_behavior.as_ref()
@@ -362,7 +334,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.session_trust_all_projects_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("session.trust_all_projects"),
                     pick: |settings_content| {
                         settings_content
@@ -395,7 +366,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("session.restore_unsaved_buffers"),
                     pick: |settings_content| {
                         settings_content
@@ -417,7 +387,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.restore_on_startup_title").into(),
                 description: t!("settings_ui.page_data.restore_on_startup_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("restore_on_startup"),
                     pick: |settings_content| settings_content.workspace.restore_on_startup.as_ref(),
                     write: |settings_content, value, _| {
@@ -442,7 +411,6 @@ fn general_page(cx: &App) -> SettingsPage {
                     .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("preview_channel_settings"),
                         pick: |settings_content| Some(settings_content),
                         write: |_settings_content, _value, _| {},
@@ -457,7 +425,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.settings_profiles_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("settings_profiles"),
                         pick: |settings_content| Some(settings_content),
                         write: |_settings_content, _value, _| {},
@@ -469,76 +436,6 @@ fn general_page(cx: &App) -> SettingsPage {
         ]
     }
 
-    fn privacy_section() -> [SettingsPageItem; 4] {
-        [
-            SettingsPageItem::SectionHeader(t!("settings_ui.page_data.privacy_section").into()),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.telemetry_diagnostics_title").into(),
-                description: t!("settings_ui.page_data.telemetry_diagnostics_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("telemetry.diagnostics"),
-                    pick: |settings_content| {
-                        settings_content
-                            .telemetry
-                            .as_ref()
-                            .and_then(|telemetry| telemetry.diagnostics.as_ref())
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .telemetry
-                            .get_or_insert_default()
-                            .diagnostics = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.telemetry_metrics_title").into(),
-                description: t!("settings_ui.page_data.telemetry_metrics_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("telemetry.metrics"),
-                    pick: |settings_content| {
-                        settings_content
-                            .telemetry
-                            .as_ref()
-                            .and_then(|telemetry| telemetry.metrics.as_ref())
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content.telemetry.get_or_insert_default().metrics = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.telemetry_anthropic_retention_title").into(),
-                description: t!("settings_ui.page_data.telemetry_anthropic_retention_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("telemetry.anthropic_retention"),
-                    pick: |settings_content| {
-                        settings_content
-                            .telemetry
-                            .as_ref()
-                            .and_then(|telemetry| telemetry.anthropic_retention.as_ref())
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .telemetry
-                            .get_or_insert_default()
-                            .anthropic_retention = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-        ]
-    }
-
     fn auto_update_section() -> [SettingsPageItem; 2] {
         [
             SettingsPageItem::SectionHeader(t!("settings_ui.page_data.auto_update_section").into()),
@@ -546,7 +443,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.auto_update_title").into(),
                 description: t!("settings_ui.page_data.auto_update_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("auto_update"),
                     pick: |settings_content| settings_content.auto_update.as_ref(),
                     write: |settings_content, value, _| {
@@ -567,7 +463,6 @@ fn general_page(cx: &App) -> SettingsPage {
                 description:
                     "Whether to suggest installing extensions based on the files you open.".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("suggest_extensions"),
                     pick: |settings_content| Some(&settings_content.extension.suggest_extensions),
                     write: |settings_content, value, _| {
@@ -588,7 +483,7 @@ fn general_page(cx: &App) -> SettingsPage {
             security_section(),
             workspace_restoration_section(),
             scoped_settings_section(),
-            privacy_section(),
+
             auto_update_section(),
             extensions_section(),
         )
@@ -606,7 +501,6 @@ fn appearance_page() -> SettingsPage {
                     title: t!("settings_ui.page_data.theme_title").into(),
                     description: t!("settings_ui.page_data.theme_description").into(),
                     field: Box::new(SettingField {
-                        organization_override: None,
                         json_path: Some("theme$"),
                         pick: |settings_content| {
                             Some(
@@ -679,7 +573,6 @@ fn appearance_page() -> SettingsPage {
                             title: t!("settings_ui.page_data.theme_title_2").into(),
                             description: t!("settings_ui.page_data.theme_description_2").into(),
                             field: Box::new(SettingField {
-                                organization_override: None,
                                 json_path: Some("theme"),
                                 pick: |settings_content| match settings_content.theme.theme.as_ref()
                                 {
@@ -707,7 +600,6 @@ fn appearance_page() -> SettingsPage {
                                 description: t!("settings_ui.page_data.theme_mode_description")
                                     .into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
                                     json_path: Some("theme.mode"),
                                     pick: |settings_content| match settings_content
                                         .theme
@@ -739,7 +631,6 @@ fn appearance_page() -> SettingsPage {
                                 description: t!("settings_ui.page_data.theme_light_description")
                                     .into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
                                     json_path: Some("theme.light"),
                                     pick: |settings_content| match settings_content
                                         .theme
@@ -771,7 +662,6 @@ fn appearance_page() -> SettingsPage {
                                 description: t!("settings_ui.page_data.theme_dark_description")
                                     .into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
                                     json_path: Some("theme.dark"),
                                     pick: |settings_content| match settings_content
                                         .theme
@@ -807,7 +697,6 @@ fn appearance_page() -> SettingsPage {
                     title: t!("settings_ui.page_data.icon_theme_title").into(),
                     description: t!("settings_ui.page_data.icon_theme_description").into(),
                     field: Box::new(SettingField {
-                        organization_override: None,
                         json_path: Some("icon_theme$"),
                         pick: |settings_content| {
                             Some(
@@ -887,7 +776,6 @@ fn appearance_page() -> SettingsPage {
                             description: t!("settings_ui.page_data.icon_theme_string_description")
                                 .into(),
                             field: Box::new(SettingField {
-                                organization_override: None,
                                 json_path: Some("icon_theme$string"),
                                 pick: |settings_content| match settings_content
                                     .theme
@@ -918,7 +806,6 @@ fn appearance_page() -> SettingsPage {
                                 description: t!("settings_ui.page_data.icon_theme_description_2")
                                     .into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
                                     json_path: Some("icon_theme"),
                                     pick: |settings_content| match settings_content
                                         .theme
@@ -954,7 +841,6 @@ fn appearance_page() -> SettingsPage {
                                 )
                                 .into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
                                     json_path: Some("icon_theme.light"),
                                     pick: |settings_content| match settings_content
                                         .theme
@@ -990,7 +876,6 @@ fn appearance_page() -> SettingsPage {
                                 )
                                 .into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
                                     json_path: Some("icon_theme.dark"),
                                     pick: |settings_content| match settings_content
                                         .theme
@@ -1032,7 +917,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.buffer_font_family_title").into(),
                 description: t!("settings_ui.page_data.buffer_font_family_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("buffer_font_family"),
                     pick: |settings_content| settings_content.theme.buffer_font_family.as_ref(),
                     write: |settings_content, value, _| {
@@ -1046,7 +930,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.buffer_font_size_title").into(),
                 description: t!("settings_ui.page_data.buffer_font_size_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("buffer_font_size"),
                     pick: |settings_content| settings_content.theme.buffer_font_size.as_ref(),
                     write: |settings_content, value, _| {
@@ -1060,7 +943,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.buffer_font_weight_title").into(),
                 description: t!("settings_ui.page_data.buffer_font_weight_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("buffer_font_weight"),
                     pick: |settings_content| settings_content.theme.buffer_font_weight.as_ref(),
                     write: |settings_content, value, _| {
@@ -1076,7 +958,6 @@ fn appearance_page() -> SettingsPage {
                     title: t!("settings_ui.page_data.buffer_line_height_title").into(),
                     description: t!("settings_ui.page_data.buffer_line_height_description").into(),
                     field: Box::new(SettingField {
-                        organization_override: None,
                         json_path: Some("buffer_line_height$"),
                         pick: |settings_content| {
                             Some(
@@ -1139,7 +1020,6 @@ fn appearance_page() -> SettingsPage {
                             )
                             .into(),
                             field: Box::new(SettingField {
-                                organization_override: None,
                                 json_path: Some("buffer_line_height"),
                                 pick: |settings_content| match settings_content
                                     .theme
@@ -1172,7 +1052,6 @@ fn appearance_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.buffer_font_features_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("buffer_font_features"),
                         pick: |settings_content| {
                             settings_content.theme.buffer_font_features.as_ref()
@@ -1191,7 +1070,6 @@ fn appearance_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.buffer_font_fallbacks_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("buffer_font_fallbacks"),
                         pick: |settings_content| {
                             settings_content.theme.buffer_font_fallbacks.as_ref()
@@ -1214,7 +1092,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.ui_font_family_title").into(),
                 description: t!("settings_ui.page_data.ui_font_family_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("ui_font_family"),
                     pick: |settings_content| settings_content.theme.ui_font_family.as_ref(),
                     write: |settings_content, value, _| {
@@ -1228,7 +1105,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.ui_font_size_title").into(),
                 description: t!("settings_ui.page_data.ui_font_size_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("ui_font_size"),
                     pick: |settings_content| settings_content.theme.ui_font_size.as_ref(),
                     write: |settings_content, value, _| {
@@ -1242,7 +1118,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.ui_font_weight_title").into(),
                 description: t!("settings_ui.page_data.ui_font_weight_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("ui_font_weight"),
                     pick: |settings_content| settings_content.theme.ui_font_weight.as_ref(),
                     write: |settings_content, value, _| {
@@ -1258,7 +1133,6 @@ fn appearance_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.ui_font_features_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("ui_font_features"),
                         pick: |settings_content| settings_content.theme.ui_font_features.as_ref(),
                         write: |settings_content, value, _| {
@@ -1275,7 +1149,6 @@ fn appearance_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.ui_font_fallbacks_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("ui_font_fallbacks"),
                         pick: |settings_content| settings_content.theme.ui_font_fallbacks.as_ref(),
                         write: |settings_content, value, _| {
@@ -1285,95 +1158,6 @@ fn appearance_page() -> SettingsPage {
                     .unimplemented(),
                 ),
                 metadata: None,
-            }),
-        ]
-    }
-
-    fn agent_panel_font_section() -> [SettingsPageItem; 5] {
-        [
-            SettingsPageItem::SectionHeader(
-                t!("settings_ui.page_data.agent_panel_font_section").into(),
-            ),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_ui_font_family_title").into(),
-                description: t!("settings_ui.page_data.agent_ui_font_family_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent_ui_font_family"),
-                    pick: |settings_content| {
-                        settings_content
-                            .theme
-                            .agent_ui_font_family
-                            .as_ref()
-                            .or(settings_content.theme.ui_font_family.as_ref())
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content.theme.agent_ui_font_family = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_ui_font_size_title").into(),
-                description: t!("settings_ui.page_data.agent_ui_font_size_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent_ui_font_size"),
-                    pick: |settings_content| {
-                        settings_content
-                            .theme
-                            .agent_ui_font_size
-                            .as_ref()
-                            .or(settings_content.theme.ui_font_size.as_ref())
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content.theme.agent_ui_font_size = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_buffer_font_family_title").into(),
-                description: t!("settings_ui.page_data.agent_buffer_font_family_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent_buffer_font_family"),
-                    pick: |settings_content| {
-                        settings_content
-                            .theme
-                            .agent_buffer_font_family
-                            .as_ref()
-                            .or(settings_content.theme.buffer_font_family.as_ref())
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content.theme.agent_buffer_font_family = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_buffer_font_size_title").into(),
-                description: t!("settings_ui.page_data.agent_buffer_font_size_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent_buffer_font_size"),
-                    pick: |settings_content| {
-                        settings_content
-                            .theme
-                            .agent_buffer_font_size
-                            .as_ref()
-                            .or(settings_content.theme.buffer_font_size.as_ref())
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content.theme.agent_buffer_font_size = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
             }),
         ]
     }
@@ -1388,7 +1172,7 @@ fn appearance_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.markdown_preview_font_family_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("markdown_preview.font_family"),
                     pick: |settings_content| {
                         settings_content
@@ -1415,7 +1199,7 @@ fn appearance_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("markdown_preview.code_font_family"),
                     pick: |settings_content| {
                         settings_content
@@ -1440,7 +1224,7 @@ fn appearance_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.markdown_preview_font_size_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("markdown_preview.font_size"),
                     pick: |settings_content| {
                         settings_content
@@ -1463,7 +1247,7 @@ fn appearance_page() -> SettingsPage {
                 title: "Heading Font Weight".into(),
                 description: "Font weight for headings in the markdown preview, in CSS units from 100 to 900.".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("markdown_preview.heading_font_weight"),
                     pick: |settings_content| {
                         settings_content
@@ -1490,9 +1274,9 @@ fn appearance_page() -> SettingsPage {
             SettingsPageItem::SectionHeader("Mermaid Font".into()),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Font Family".into(),
-                description: "Font family for Mermaid diagrams in the agent panel and markdown preview. Falls back to the UI font family.".into(),
+                description: "Font family for Mermaid diagrams in the markdown preview. Falls back to the UI font family.".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("mermaid_font_family"),
                     pick: |settings_content| {
                         settings_content
@@ -1520,7 +1304,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.text_rendering_mode_title").into(),
                 description: t!("settings_ui.page_data.text_rendering_mode_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("text_rendering_mode"),
                     pick: |settings_content| {
                         settings_content.workspace.text_rendering_mode.as_ref()
@@ -1536,7 +1319,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.display_p3_title").into(),
                 description: t!("settings_ui.page_data.display_p3_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("use_display_p3"),
                     pick: |settings_content| settings_content.workspace.use_display_p3.as_ref(),
                     write: |settings_content, value, _| {
@@ -1556,7 +1338,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.multi_cursor_modifier_title").into(),
                 description: t!("settings_ui.page_data.multi_cursor_modifier_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("multi_cursor_modifier"),
                     pick: |settings_content| settings_content.editor.multi_cursor_modifier.as_ref(),
                     write: |settings_content, value, _| {
@@ -1570,7 +1351,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.cursor_blink_title").into(),
                 description: t!("settings_ui.page_data.cursor_blink_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("cursor_blink"),
                     pick: |settings_content| settings_content.editor.cursor_blink.as_ref(),
                     write: |settings_content, value, _| {
@@ -1584,7 +1364,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.cursor_animation_title").into(),
                 description: t!("settings_ui.page_data.cursor_animation_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("cursor_animation.enabled"),
                     pick: |settings_content| {
                         settings_content
@@ -1609,7 +1388,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.cursor_shape_title").into(),
                 description: t!("settings_ui.page_data.cursor_shape_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("cursor_shape"),
                     pick: |settings_content| settings_content.editor.cursor_shape.as_ref(),
                     write: |settings_content, value, _| {
@@ -1623,7 +1401,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.hide_mouse_title").into(),
                 description: t!("settings_ui.page_data.hide_mouse_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("hide_mouse"),
                     pick: |settings_content| settings_content.hide_mouse.as_ref(),
                     write: |settings_content, value, _| {
@@ -1637,7 +1414,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.reduce_motion_title").into(),
                 description: t!("settings_ui.page_data.reduce_motion_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("reduce_motion"),
                     pick: |settings_content| settings_content.reduce_motion.as_ref(),
                     write: |settings_content, value, _| {
@@ -1659,7 +1435,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.unnecessary_code_fade_title").into(),
                 description: t!("settings_ui.page_data.unnecessary_code_fade_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("unnecessary_code_fade"),
                     pick: |settings_content| settings_content.theme.unnecessary_code_fade.as_ref(),
                     write: |settings_content, value, _| {
@@ -1673,7 +1448,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.current_line_highlight_title").into(),
                 description: t!("settings_ui.page_data.current_line_highlight_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("current_line_highlight"),
                     pick: |settings_content| {
                         settings_content.editor.current_line_highlight.as_ref()
@@ -1689,7 +1463,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.selection_highlight_title").into(),
                 description: t!("settings_ui.page_data.selection_highlight_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("selection_highlight"),
                     pick: |settings_content| settings_content.editor.selection_highlight.as_ref(),
                     write: |settings_content, value, _| {
@@ -1703,7 +1476,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.rounded_selection_title").into(),
                 description: t!("settings_ui.page_data.rounded_selection_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("rounded_selection"),
                     pick: |settings_content| settings_content.editor.rounded_selection.as_ref(),
                     write: |settings_content, value, _| {
@@ -1720,7 +1492,6 @@ fn appearance_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("minimum_contrast_for_highlights"),
                     pick: |settings_content| {
                         settings_content
@@ -1745,7 +1516,6 @@ fn appearance_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.show_wrap_guides_title").into(),
                 description: t!("settings_ui.page_data.show_wrap_guides_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("show_wrap_guides"),
                     pick: |settings_content| {
                         settings_content
@@ -1772,7 +1542,6 @@ fn appearance_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.wrap_guides_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("wrap_guides"),
                         pick: |settings_content| {
                             settings_content
@@ -1798,7 +1567,6 @@ fn appearance_page() -> SettingsPage {
         theme_section(),
         buffer_font_section(),
         ui_font_section(),
-        agent_panel_font_section(),
         markdown_preview_font_section(),
         mermaid_font_section(),
         text_rendering_section(),
@@ -1846,7 +1614,6 @@ fn keymap_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.base_keymap_title").into(),
                 description: t!("settings_ui.page_data.base_keymap_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("base_keymap"),
                     pick: |settings_content| settings_content.base_keymap.as_ref(),
                     write: |settings_content, value, _| {
@@ -1871,7 +1638,6 @@ fn keymap_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.vim_mode_title").into(),
                 description: t!("settings_ui.page_data.vim_mode_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim_mode"),
                     pick: |settings_content| settings_content.vim_mode.as_ref(),
                     write: write_vim_mode,
@@ -1883,7 +1649,6 @@ fn keymap_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.helix_mode_title").into(),
                 description: t!("settings_ui.page_data.helix_mode_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("helix_mode"),
                     pick: |settings_content| settings_content.helix_mode.as_ref(),
                     write: write_helix_mode,
@@ -1916,7 +1681,7 @@ fn editor_page() -> SettingsPage {
                     title: t!("settings_ui.page_data.autosave_title").into(),
                     description: t!("settings_ui.page_data.autosave_description").into(),
                     field: Box::new(SettingField {
-                        organization_override: None,
+
                         json_path: Some("autosave$"),
                         pick: |settings_content| {
                             Some(
@@ -1973,7 +1738,7 @@ fn editor_page() -> SettingsPage {
                             title: t!("settings_ui.page_data.autosave_after_delay_milliseconds_title").into(),
                             description: t!("settings_ui.page_data.autosave_after_delay_milliseconds_description").into(),
                             field: Box::new(SettingField {
-                                organization_override: None,
+
                                 json_path: Some("autosave.after_delay.milliseconds"),
                                 pick: |settings_content| match settings_content
                                     .workspace
@@ -2017,7 +1782,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.which_key_enabled_title").into(),
                 description: t!("settings_ui.page_data.which_key_enabled_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("which_key.enabled"),
                     pick: |settings_content| {
                         settings_content
@@ -2036,7 +1800,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.which_key_delay_ms_title").into(),
                 description: t!("settings_ui.page_data.which_key_delay_ms_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("which_key.delay_ms"),
                     pick: |settings_content| {
                         settings_content
@@ -2062,7 +1825,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.double_click_in_multibuffer_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("double_click_in_multibuffer"),
                     pick: |settings_content| {
                         settings_content.editor.double_click_in_multibuffer.as_ref()
@@ -2078,7 +1840,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.expand_excerpt_lines_title").into(),
                 description: t!("settings_ui.page_data.expand_excerpt_lines_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("expand_excerpt_lines"),
                     pick: |settings_content| settings_content.editor.expand_excerpt_lines.as_ref(),
                     write: |settings_content, value, _| {
@@ -2092,7 +1853,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.excerpt_context_lines_title").into(),
                 description: t!("settings_ui.page_data.excerpt_context_lines_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("excerpt_context_lines"),
                     pick: |settings_content| settings_content.editor.excerpt_context_lines.as_ref(),
                     write: |settings_content, value, _| {
@@ -2110,7 +1870,6 @@ fn editor_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.expand_outlines_with_depth"),
                     pick: |settings_content| {
                         settings_content
@@ -2134,7 +1893,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.diff_view_style_title").into(),
                 description: t!("settings_ui.page_data.diff_view_style_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diff_view_style"),
                     pick: |settings_content| settings_content.editor.diff_view_style.as_ref(),
                     write: |settings_content, value, _| {
@@ -2149,7 +1907,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.minimum_split_diff_width_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("minimum_split_diff_width"),
                     pick: |settings_content| {
                         settings_content.editor.minimum_split_diff_width.as_ref()
@@ -2171,7 +1928,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.scroll_beyond_last_line_title").into(),
                 description: t!("settings_ui.page_data.scroll_beyond_last_line_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scroll_beyond_last_line"),
                     pick: |settings_content| {
                         settings_content.editor.scroll_beyond_last_line.as_ref()
@@ -2187,7 +1943,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.vertical_scroll_margin_title").into(),
                 description: t!("settings_ui.page_data.vertical_scroll_margin_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vertical_scroll_margin"),
                     pick: |settings_content| {
                         settings_content.editor.vertical_scroll_margin.as_ref()
@@ -2204,7 +1959,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.horizontal_scroll_margin_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("horizontal_scroll_margin"),
                     pick: |settings_content| {
                         settings_content.editor.horizontal_scroll_margin.as_ref()
@@ -2220,7 +1974,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.scroll_sensitivity_title").into(),
                 description: t!("settings_ui.page_data.scroll_sensitivity_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scroll_sensitivity"),
                     pick: |settings_content| settings_content.editor.scroll_sensitivity.as_ref(),
                     write: |settings_content, value, _| {
@@ -2234,7 +1987,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.mouse_wheel_zoom_title").into(),
                 description: t!("settings_ui.page_data.mouse_wheel_zoom_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("mouse_wheel_zoom"),
                     pick: |settings_content| settings_content.editor.mouse_wheel_zoom.as_ref(),
                     write: |settings_content, value, _| {
@@ -2248,7 +2000,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.fast_scroll_sensitivity_title").into(),
                 description: t!("settings_ui.page_data.fast_scroll_sensitivity_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("fast_scroll_sensitivity"),
                     pick: |settings_content| {
                         settings_content.editor.fast_scroll_sensitivity.as_ref()
@@ -2264,7 +2015,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.autoscroll_on_clicks_title").into(),
                 description: t!("settings_ui.page_data.autoscroll_on_clicks_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("autoscroll_on_clicks"),
                     pick: |settings_content| settings_content.editor.autoscroll_on_clicks.as_ref(),
                     write: |settings_content, value, _| {
@@ -2278,7 +2028,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.sticky_scroll_enabled_title").into(),
                 description: t!("settings_ui.page_data.sticky_scroll_enabled_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("sticky_scroll.enabled"),
                     pick: |settings_content| {
                         settings_content
@@ -2310,7 +2059,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.auto_signature_help_title").into(),
                 description: t!("settings_ui.page_data.auto_signature_help_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("auto_signature_help"),
                     pick: |settings_content| settings_content.editor.auto_signature_help.as_ref(),
                     write: |settings_content, value, _| {
@@ -2327,7 +2075,6 @@ fn editor_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("show_signature_help_after_edits"),
                     pick: |settings_content| {
                         settings_content
@@ -2346,7 +2093,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.snippet_sort_order_title").into(),
                 description: t!("settings_ui.page_data.snippet_sort_order_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("snippet_sort_order"),
                     pick: |settings_content| settings_content.editor.snippet_sort_order.as_ref(),
                     write: |settings_content, value, _| {
@@ -2368,7 +2114,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.hover_popover_enabled_title").into(),
                 description: t!("settings_ui.page_data.hover_popover_enabled_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("hover_popover_enabled"),
                     pick: |settings_content| settings_content.editor.hover_popover_enabled.as_ref(),
                     write: |settings_content, value, _| {
@@ -2383,7 +2128,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.hover_popover_delay_title").into(),
                 description: t!("settings_ui.page_data.hover_popover_delay_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("hover_popover_delay"),
                     pick: |settings_content| settings_content.editor.hover_popover_delay.as_ref(),
                     write: |settings_content, value, _| {
@@ -2397,7 +2141,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.hover_popover_sticky_title").into(),
                 description: t!("settings_ui.page_data.hover_popover_sticky_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("hover_popover_sticky"),
                     pick: |settings_content| settings_content.editor.hover_popover_sticky.as_ref(),
                     write: |settings_content, value, _| {
@@ -2413,7 +2156,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.hover_popover_hiding_delay_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("hover_popover_hiding_delay"),
                     pick: |settings_content| {
                         settings_content.editor.hover_popover_hiding_delay.as_ref()
@@ -2440,7 +2182,6 @@ fn editor_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("drag_and_drop_selection.enabled"),
                     pick: |settings_content| {
                         settings_content
@@ -2465,7 +2206,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.drag_and_drop_selection_delay_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("drag_and_drop_selection.delay"),
                     pick: |settings_content| {
                         settings_content
@@ -2495,7 +2235,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.gutter_line_numbers_title").into(),
                 description: t!("settings_ui.page_data.gutter_line_numbers_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("gutter.line_numbers"),
                     pick: |settings_content| {
                         settings_content
@@ -2519,7 +2258,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.relative_line_numbers_title").into(),
                 description: t!("settings_ui.page_data.relative_line_numbers_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("relative_line_numbers"),
                     pick: |settings_content| settings_content.editor.relative_line_numbers.as_ref(),
                     write: |settings_content, value, _| {
@@ -2533,7 +2271,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.gutter_runnables_title").into(),
                 description: t!("settings_ui.page_data.gutter_runnables_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("gutter.runnables"),
                     pick: |settings_content| {
                         settings_content
@@ -2557,7 +2294,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.gutter_breakpoints_title").into(),
                 description: t!("settings_ui.page_data.gutter_breakpoints_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("gutter.breakpoints"),
                     pick: |settings_content| {
                         settings_content
@@ -2581,7 +2317,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.gutter_bookmarks_title").into(),
                 description: t!("settings_ui.page_data.gutter_bookmarks_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("gutter.bookmarks"),
                     pick: |settings_content| {
                         settings_content
@@ -2605,7 +2340,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.gutter_folds_title").into(),
                 description: t!("settings_ui.page_data.gutter_folds_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("gutter.folds"),
                     pick: |settings_content| {
                         settings_content
@@ -2626,7 +2360,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.gutter_min_line_number_digits_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("gutter.min_line_number_digits"),
                     pick: |settings_content| {
                         settings_content
@@ -2651,7 +2384,6 @@ fn editor_page() -> SettingsPage {
                     title: t!("settings_ui.page_data.git_gutter_width_title").into(),
                     description: t!("settings_ui.page_data.git_gutter_width_description").into(),
                     field: Box::new(SettingField {
-                        organization_override: None,
                         json_path: Some("gutter.git_gutter_width$"),
                         pick: |settings_content| {
                             Some(
@@ -2709,7 +2441,6 @@ fn editor_page() -> SettingsPage {
                             )
                             .into(),
                             field: Box::new(SettingField {
-                                organization_override: None,
                                 json_path: Some("gutter.git_gutter_width"),
                                 pick: |settings_content| match settings_content
                                     .editor
@@ -2744,7 +2475,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.inline_code_actions_title").into(),
                 description: t!("settings_ui.page_data.inline_code_actions_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("inline_code_actions"),
                     pick: |settings_content| settings_content.editor.inline_code_actions.as_ref(),
                     write: |settings_content, value, _| {
@@ -2764,7 +2494,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.scrollbar_title").into(),
                 description: t!("settings_ui.page_data.scrollbar_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scrollbar"),
                     pick: |settings_content| {
                         settings_content.editor.scrollbar.as_ref()?.show.as_ref()
@@ -2784,7 +2513,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.scrollbar_cursors_title").into(),
                 description: t!("settings_ui.page_data.scrollbar_cursors_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scrollbar.cursors"),
                     pick: |settings_content| {
                         settings_content.editor.scrollbar.as_ref()?.cursors.as_ref()
@@ -2804,7 +2532,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.scrollbar_git_diff_title").into(),
                 description: t!("settings_ui.page_data.scrollbar_git_diff_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scrollbar.git_diff"),
                     pick: |settings_content| {
                         settings_content
@@ -2830,7 +2557,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.scrollbar_search_results_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scrollbar.search_results"),
                     pick: |settings_content| {
                         settings_content
@@ -2855,7 +2581,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.scrollbar_selected_text_title").into(),
                 description: t!("settings_ui.page_data.scrollbar_selected_text_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scrollbar.selected_text"),
                     pick: |settings_content| {
                         settings_content
@@ -2881,7 +2606,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.scrollbar_selected_symbol_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scrollbar.selected_symbol"),
                     pick: |settings_content| {
                         settings_content
@@ -2906,7 +2630,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.scrollbar_diagnostics_title").into(),
                 description: t!("settings_ui.page_data.scrollbar_diagnostics_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scrollbar.diagnostics"),
                     pick: |settings_content| {
                         settings_content
@@ -2932,7 +2655,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.scrollbar_axes_horizontal_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scrollbar.axes.horizontal"),
                     pick: |settings_content| {
                         settings_content
@@ -2961,7 +2683,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.scrollbar_axes_vertical_title").into(),
                 description: t!("settings_ui.page_data.scrollbar_axes_vertical_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("scrollbar.axes.vertical"),
                     pick: |settings_content| {
                         settings_content
@@ -2996,7 +2717,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.minimap_show_title").into(),
                 description: t!("settings_ui.page_data.minimap_show_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("minimap.show"),
                     pick: |settings_content| {
                         settings_content.editor.minimap.as_ref()?.show.as_ref()
@@ -3012,7 +2732,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.minimap_display_in_title").into(),
                 description: t!("settings_ui.page_data.minimap_display_in_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("minimap.display_in"),
                     pick: |settings_content| {
                         settings_content
@@ -3037,7 +2756,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.minimap_thumb_title").into(),
                 description: t!("settings_ui.page_data.minimap_thumb_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("minimap.thumb"),
                     pick: |settings_content| {
                         settings_content.editor.minimap.as_ref()?.thumb.as_ref()
@@ -3057,7 +2775,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.minimap_thumb_border_title").into(),
                 description: t!("settings_ui.page_data.minimap_thumb_border_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("minimap.thumb_border"),
                     pick: |settings_content| {
                         settings_content
@@ -3083,7 +2800,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.minimap_current_line_highlight_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("minimap.current_line_highlight"),
                     pick: |settings_content| {
                         settings_content
@@ -3109,7 +2825,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.minimap_max_width_columns_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("minimap.max_width_columns"),
                     pick: |settings_content| {
                         settings_content
@@ -3133,14 +2848,13 @@ fn editor_page() -> SettingsPage {
         ]
     }
 
-    fn toolbar_section() -> [SettingsPageItem; 6] {
+    fn toolbar_section() -> [SettingsPageItem; 5] {
         [
             SettingsPageItem::SectionHeader(t!("settings_ui.page_data.toolbar_section").into()),
             SettingsPageItem::SettingItem(SettingItem {
                 title: t!("settings_ui.page_data.toolbar_breadcrumbs_title").into(),
                 description: t!("settings_ui.page_data.toolbar_breadcrumbs_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("toolbar.breadcrumbs"),
                     pick: |settings_content| {
                         settings_content
@@ -3165,7 +2879,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.toolbar_quick_actions_title").into(),
                 description: t!("settings_ui.page_data.toolbar_quick_actions_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("toolbar.quick_actions"),
                     pick: |settings_content| {
                         settings_content
@@ -3190,7 +2903,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.toolbar_selections_menu_title").into(),
                 description: t!("settings_ui.page_data.toolbar_selections_menu_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("toolbar.selections_menu"),
                     pick: |settings_content| {
                         settings_content
@@ -3212,35 +2924,9 @@ fn editor_page() -> SettingsPage {
                 files: USER,
             }),
             SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.toolbar_agent_review_title").into(),
-                description: t!("settings_ui.page_data.toolbar_agent_review_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("toolbar.agent_review"),
-                    pick: |settings_content| {
-                        settings_content
-                            .editor
-                            .toolbar
-                            .as_ref()?
-                            .agent_review
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .editor
-                            .toolbar
-                            .get_or_insert_default()
-                            .agent_review = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
                 title: t!("settings_ui.page_data.toolbar_code_actions_title").into(),
                 description: t!("settings_ui.page_data.toolbar_code_actions_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("toolbar.code_actions"),
                     pick: |settings_content| {
                         settings_content
@@ -3264,14 +2950,13 @@ fn editor_page() -> SettingsPage {
         ]
     }
 
-    fn vim_settings_section() -> [SettingsPageItem; 14] {
+    fn vim_settings_section() -> [SettingsPageItem; 13] {
         [
             SettingsPageItem::SectionHeader(t!("settings_ui.page_data.vim_section").into()),
             SettingsPageItem::SettingItem(SettingItem {
                 title: t!("settings_ui.page_data.vim_default_mode_title").into(),
                 description: t!("settings_ui.page_data.vim_default_mode_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.default_mode"),
                     pick: |settings_content| settings_content.vim.as_ref()?.default_mode.as_ref(),
                     write: |settings_content, value, _| {
@@ -3288,7 +2973,6 @@ fn editor_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.toggle_relative_line_numbers"),
                     pick: |settings_content| {
                         settings_content
@@ -3312,7 +2996,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.vim_use_system_clipboard_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.use_system_clipboard"),
                     pick: |settings_content| {
                         settings_content.vim.as_ref()?.use_system_clipboard.as_ref()
@@ -3331,7 +3014,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.vim_use_smartcase_find_title").into(),
                 description: t!("settings_ui.page_data.vim_use_smartcase_find_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.use_smartcase_find"),
                     pick: |settings_content| {
                         settings_content.vim.as_ref()?.use_smartcase_find.as_ref()
@@ -3350,7 +3032,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.vim_gdefault_title").into(),
                 description: t!("settings_ui.page_data.vim_gdefault_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.gdefault"),
                     pick: |settings_content| settings_content.vim.as_ref()?.gdefault.as_ref(),
                     write: |settings_content, value, _| {
@@ -3365,7 +3046,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.vim_highlight_on_yank_duration_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.highlight_on_yank_duration"),
                     pick: |settings_content| {
                         settings_content
@@ -3388,7 +3068,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.vim_use_regex_search_title").into(),
                 description: t!("settings_ui.page_data.vim_use_regex_search_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.use_regex_search"),
                     pick: |settings_content| {
                         settings_content.vim.as_ref()?.use_regex_search.as_ref()
@@ -3404,37 +3083,9 @@ fn editor_page() -> SettingsPage {
                 files: USER,
             }),
             SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.vim_show_edit_predictions_in_normal_mode_title")
-                    .into(),
-                description: t!(
-                    "settings_ui.page_data.vim_show_edit_predictions_in_normal_mode_description"
-                )
-                .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("vim.show_edit_predictions_in_normal_mode"),
-                    pick: |settings_content| {
-                        settings_content
-                            .vim
-                            .as_ref()?
-                            .show_edit_predictions_in_normal_mode
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .vim
-                            .get_or_insert_default()
-                            .show_edit_predictions_in_normal_mode = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
                 title: t!("settings_ui.page_data.vim_cursor_shape_normal_title").into(),
                 description: t!("settings_ui.page_data.vim_cursor_shape_normal_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.cursor_shape.normal"),
                     pick: |settings_content| {
                         settings_content
@@ -3461,7 +3112,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.vim_cursor_shape_insert_title").into(),
                 description: t!("settings_ui.page_data.vim_cursor_shape_insert_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.cursor_shape.insert"),
                     pick: |settings_content| {
                         settings_content
@@ -3489,7 +3139,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.vim_cursor_shape_replace_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.cursor_shape.replace"),
                     pick: |settings_content| {
                         settings_content
@@ -3516,7 +3165,6 @@ fn editor_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.vim_cursor_shape_visual_title").into(),
                 description: t!("settings_ui.page_data.vim_cursor_shape_visual_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("vim.cursor_shape.visual"),
                     pick: |settings_content| {
                         settings_content
@@ -3544,7 +3192,6 @@ fn editor_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.vim_custom_digraphs_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("vim.custom_digraphs"),
                         pick: |settings_content| {
                             settings_content.vim.as_ref()?.custom_digraphs.as_ref()
@@ -3592,7 +3239,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.file_type_associations_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("file_type_associations"),
                         pick: |settings_content| {
                             settings_content.project.all_languages.file_types.as_ref()
@@ -3617,7 +3263,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.diagnostics_max_severity_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diagnostics_max_severity"),
                     pick: |settings_content| {
                         settings_content.editor.diagnostics_max_severity.as_ref()
@@ -3634,7 +3279,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.diagnostics_include_warnings_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diagnostics.include_warnings"),
                     pick: |settings_content| {
                         settings_content
@@ -3666,7 +3310,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.diagnostics_inline_enabled_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diagnostics.inline.enabled"),
                     pick: |settings_content| {
                         settings_content
@@ -3697,7 +3340,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diagnostics.inline.update_debounce_ms"),
                     pick: |settings_content| {
                         settings_content
@@ -3725,7 +3367,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.diagnostics_inline_padding_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diagnostics.inline.padding"),
                     pick: |settings_content| {
                         settings_content
@@ -3753,7 +3394,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 description: t!("settings_ui.page_data.diagnostics_inline_min_column_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diagnostics.inline.min_column"),
                     pick: |settings_content| {
                         settings_content
@@ -3792,7 +3432,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diagnostics.lsp_pull_diagnostics.enabled"),
                     pick: |settings_content| {
                         settings_content
@@ -3826,7 +3465,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diagnostics.lsp_pull_diagnostics.debounce_ms"),
                     pick: |settings_content| {
                         settings_content
@@ -3861,7 +3499,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                 title: t!("settings_ui.page_data.lsp_highlight_debounce_title").into(),
                 description: t!("settings_ui.page_data.lsp_highlight_debounce_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("lsp_highlight_debounce"),
                     pick: |settings_content| {
                         settings_content.editor.lsp_highlight_debounce.as_ref()
@@ -3896,7 +3533,6 @@ fn languages_and_tools_page(cx: &App) -> SettingsPage {
                     let items: Box<[SettingsPageItem]> = concat_sections!(
                         language_settings_data(),
                         non_editor_language_settings_data(),
-                        edit_prediction_language_settings_section()
                     );
                     this.render_sub_page_items(items.iter().enumerate(), scroll_handle, window, cx)
                         .into_any_element()
@@ -3930,7 +3566,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.search_whole_word_title").into(),
                 description: t!("settings_ui.page_data.search_whole_word_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("search.whole_word"),
                     pick: |settings_content| {
                         settings_content.editor.search.as_ref()?.whole_word.as_ref()
@@ -3950,7 +3585,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.search_case_sensitive_title").into(),
                 description: t!("settings_ui.page_data.search_case_sensitive_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("search.case_sensitive"),
                     pick: |settings_content| {
                         settings_content
@@ -3975,7 +3609,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.use_smartcase_search_title").into(),
                 description: t!("settings_ui.page_data.use_smartcase_search_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("use_smartcase_search"),
                     pick: |settings_content| settings_content.editor.use_smartcase_search.as_ref(),
                     write: |settings_content, value, _| {
@@ -3989,7 +3622,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.search_include_ignored_title").into(),
                 description: t!("settings_ui.page_data.search_include_ignored_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("search.include_ignored"),
                     pick: |settings_content| {
                         settings_content
@@ -4014,7 +3646,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.search_regex_title").into(),
                 description: t!("settings_ui.page_data.search_regex_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("search.regex"),
                     pick: |settings_content| {
                         settings_content.editor.search.as_ref()?.regex.as_ref()
@@ -4030,7 +3661,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.search_wrap_title").into(),
                 description: t!("settings_ui.page_data.search_wrap_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("search_wrap"),
                     pick: |settings_content| settings_content.editor.search_wrap.as_ref(),
                     write: |settings_content, value, _| {
@@ -4045,7 +3675,6 @@ fn search_and_files_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.editor_search_center_on_match_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("editor.search.center_on_match"),
                     pick: |settings_content| {
                         settings_content
@@ -4069,7 +3698,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.search_on_type_title").into(),
                 description: t!("settings_ui.page_data.search_on_type_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("editor.search.search_on_type"),
                     pick: |settings_content| {
                         settings_content
@@ -4094,7 +3722,6 @@ fn search_and_files_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.seed_search_query_from_cursor_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("seed_search_query_from_cursor"),
                     pick: |settings_content| {
                         settings_content
@@ -4124,7 +3751,6 @@ fn search_and_files_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("command_palette.use_command_history"),
                     pick: |settings_content| {
                         settings_content
@@ -4155,7 +3781,7 @@ fn search_and_files_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.file_finder_include_ignored_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("file_finder.include_ignored"),
                     pick: |settings_content| {
                         settings_content
@@ -4178,7 +3804,7 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.file_finder_file_icons_title").into(),
                 description: t!("settings_ui.page_data.file_finder_file_icons_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("file_finder.file_icons"),
                     pick: |settings_content| {
                         settings_content.file_finder.as_ref()?.file_icons.as_ref()
@@ -4203,7 +3829,7 @@ fn search_and_files_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("file_finder.skip_focus_for_active_in_search"),
                     pick: |settings_content| {
                         settings_content
@@ -4226,7 +3852,7 @@ fn search_and_files_page() -> SettingsPage {
                 title: "Prefill Query From Selection".into(),
                 description: "Whether to pre-fill the file finder's query with the text selected in the focused item (e.g. an editor or a terminal).".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("file_finder.prefill_query_from_selection"),
                     pick: |settings_content| {
                         settings_content
@@ -4256,7 +3882,6 @@ fn search_and_files_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.file_scan_exclusions_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("file_scan_exclusions"),
                         pick: |settings_content| {
                             settings_content
@@ -4279,7 +3904,6 @@ fn search_and_files_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.file_scan_inclusions_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("file_scan_inclusions"),
                         pick: |settings_content| {
                             settings_content
@@ -4301,7 +3925,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.file_scan_depth_title").into(),
                 description: t!("settings_ui.page_data.file_scan_depth_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("file_scan_depth"),
                     pick: |settings_content| {
                         settings_content.project.worktree.file_scan_depth.as_ref()
@@ -4318,7 +3941,7 @@ fn search_and_files_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.scan_symlinks_description").into(),
                 field: Box::new(SettingField {
                     json_path: Some("scan_symlinks"),
-                    organization_override: None,
+
                     pick: |settings_content| {
                         settings_content.project.worktree.scan_symlinks.as_ref()
                     },
@@ -4333,7 +3956,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.restore_on_file_reopen_title").into(),
                 description: t!("settings_ui.page_data.restore_on_file_reopen_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("restore_on_file_reopen"),
                     pick: |settings_content| {
                         settings_content.workspace.restore_on_file_reopen.as_ref()
@@ -4349,7 +3971,6 @@ fn search_and_files_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.close_on_file_delete_title").into(),
                 description: t!("settings_ui.page_data.close_on_file_delete_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("close_on_file_delete"),
                     pick: |settings_content| {
                         settings_content.workspace.close_on_file_delete.as_ref()
@@ -4383,7 +4004,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.project_panel_button_title").into(),
                 description: t!("settings_ui.page_data.project_panel_button_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("project_panel.button"),
                     pick: |settings_content| {
                         settings_content.project_panel.as_ref()?.button.as_ref()
@@ -4405,7 +4025,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("status_bar.active_language_button"),
                     pick: |settings_content| {
                         settings_content
@@ -4431,7 +4050,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("status_bar.active_encoding_button"),
                     pick: |settings_content| {
                         settings_content
@@ -4457,7 +4075,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("status_bar.cursor_position_button"),
                     pick: |settings_content| {
                         settings_content
@@ -4481,7 +4098,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.status_bar_line_endings_button_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("status_bar.line_endings_button"),
                     pick: |settings_content| {
                         settings_content
@@ -4505,7 +4121,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.pending_keystrokes_indicator_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("status_bar.pending_keystrokes_indicator"),
                     pick: |settings_content| {
                         settings_content
@@ -4528,7 +4143,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_button_title").into(),
                 description: t!("settings_ui.page_data.terminal_button_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.button"),
                     pick: |settings_content| settings_content.terminal.as_ref()?.button.as_ref(),
                     write: |settings_content, value, _| {
@@ -4542,7 +4156,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.diagnostics_button_title").into(),
                 description: t!("settings_ui.page_data.diagnostics_button_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("diagnostics.button"),
                     pick: |settings_content| settings_content.diagnostics.as_ref()?.button.as_ref(),
                     write: |settings_content, value, _| {
@@ -4556,7 +4169,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.search_button_title").into(),
                 description: t!("settings_ui.page_data.search_button_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("search.button"),
                     pick: |settings_content| {
                         settings_content.editor.search.as_ref()?.button.as_ref()
@@ -4576,7 +4188,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.debugger_button_title").into(),
                 description: t!("settings_ui.page_data.debugger_button_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("debugger.button"),
                     pick: |settings_content| settings_content.debugger.as_ref()?.button.as_ref(),
                     write: |settings_content, value, _| {
@@ -4591,7 +4202,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.status_bar_show_active_file_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("status_bar.show_active_file"),
                     pick: |settings_content| {
                         settings_content
@@ -4613,7 +4223,7 @@ fn window_and_layout_page() -> SettingsPage {
         ]
     }
 
-    fn title_bar_section() -> [SettingsPageItem; 12] {
+    fn title_bar_section() -> [SettingsPageItem; 10] {
         [
             SettingsPageItem::SectionHeader(t!("settings_ui.page_data.title_bar_section").into()),
             SettingsPageItem::SettingItem(SettingItem {
@@ -4623,7 +4233,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("title_bar.show_branch_status_icon"),
                     pick: |settings_content| {
                         settings_content
@@ -4647,7 +4256,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.title_bar_show_branch_name_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("title_bar.show_branch_name"),
                     pick: |settings_content| {
                         settings_content
@@ -4671,7 +4279,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.title_bar_show_worktree_name_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("title_bar.show_worktree_name"),
                     pick: |settings_content| {
                         settings_content
@@ -4695,7 +4302,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.title_bar_show_project_items_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("title_bar.show_project_items"),
                     pick: |settings_content| {
                         settings_content
@@ -4721,7 +4327,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("title_bar.show_onboarding_banner"),
                     pick: |settings_content| {
                         settings_content
@@ -4741,63 +4346,23 @@ fn window_and_layout_page() -> SettingsPage {
                 files: USER,
             }),
             SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.title_bar_show_sign_in_title").into(),
-                description: t!("settings_ui.page_data.title_bar_show_sign_in_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("title_bar.show_sign_in"),
-                    pick: |settings_content| {
-                        settings_content.title_bar.as_ref()?.show_sign_in.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .title_bar
-                            .get_or_insert_default()
-                            .show_sign_in = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.title_bar_show_user_menu_title").into(),
-                description: t!("settings_ui.page_data.title_bar_show_user_menu_description")
+                title: t!("settings_ui.page_data.title_bar_show_settings_menu_title").into(),
+                description: t!("settings_ui.page_data.title_bar_show_settings_menu_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("title_bar.show_user_menu"),
-                    pick: |settings_content| {
-                        settings_content.title_bar.as_ref()?.show_user_menu.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .title_bar
-                            .get_or_insert_default()
-                            .show_user_menu = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.title_bar_show_user_picture_title").into(),
-                description: t!("settings_ui.page_data.title_bar_show_user_picture_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("title_bar.show_user_picture"),
+                    json_path: Some("title_bar.show_settings_menu"),
                     pick: |settings_content| {
                         settings_content
                             .title_bar
                             .as_ref()?
-                            .show_user_picture
+                            .show_settings_menu
                             .as_ref()
                     },
                     write: |settings_content, value, _| {
                         settings_content
                             .title_bar
                             .get_or_insert_default()
-                            .show_user_picture = value;
+                            .show_settings_menu = value;
                     },
                 }),
                 metadata: None,
@@ -4807,7 +4372,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.title_bar_show_menus_title").into(),
                 description: t!("settings_ui.page_data.title_bar_show_menus_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("title_bar.show_menus"),
                     pick: |settings_content| {
                         settings_content.title_bar.as_ref()?.show_menus.as_ref()
@@ -4829,7 +4393,6 @@ fn window_and_layout_page() -> SettingsPage {
                     description: t!("settings_ui.page_data.title_bar_button_layout_description")
                         .into(),
                     field: Box::new(SettingField {
-                        organization_override: None,
                         json_path: Some("title_bar.button_layout$"),
                         pick: |settings_content| {
                             Some(
@@ -4914,7 +4477,6 @@ fn window_and_layout_page() -> SettingsPage {
                                 )
                                 .into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
                                     json_path: Some("title_bar.button_layout"),
                                     pick: |settings_content| match settings_content
                                         .title_bar
@@ -4948,7 +4510,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: "Open Menus on Hover".into(),
                 description: "Automatically open menus in the titlebar on hover.".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("title_bar.open_menus_on_hover"),
                     pick: |settings_content| {
                         settings_content
@@ -4977,7 +4538,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.tab_bar_show_title").into(),
                 description: t!("settings_ui.page_data.tab_bar_show_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tab_bar.show"),
                     pick: |settings_content| settings_content.tab_bar.as_ref()?.show.as_ref(),
                     write: |settings_content, value, _| {
@@ -4991,7 +4551,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.tabs_git_status_title").into(),
                 description: t!("settings_ui.page_data.tabs_git_status_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tabs.git_status"),
                     pick: |settings_content| settings_content.tabs.as_ref()?.git_status.as_ref(),
                     write: |settings_content, value, _| {
@@ -5005,7 +4564,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.tabs_file_icons_title").into(),
                 description: t!("settings_ui.page_data.tabs_file_icons_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tabs.file_icons"),
                     pick: |settings_content| settings_content.tabs.as_ref()?.file_icons.as_ref(),
                     write: |settings_content, value, _| {
@@ -5019,7 +4577,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.tabs_close_position_title").into(),
                 description: t!("settings_ui.page_data.tabs_close_position_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tabs.close_position"),
                     pick: |settings_content| {
                         settings_content.tabs.as_ref()?.close_position.as_ref()
@@ -5039,7 +4596,6 @@ fn window_and_layout_page() -> SettingsPage {
                 // is complex, so I'm going to come back to this later
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("max_tabs"),
                         pick: |settings_content| settings_content.workspace.max_tabs.as_ref(),
                         write: |settings_content, value, _| {
@@ -5057,7 +4613,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tab_bar.show_nav_history_buttons"),
                     pick: |settings_content| {
                         settings_content
@@ -5081,7 +4636,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.tab_bar_show_tab_bar_buttons_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tab_bar.show_tab_bar_buttons"),
                     pick: |settings_content| {
                         settings_content
@@ -5108,7 +4662,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tab_bar.show_pinned_tabs_in_separate_row"),
                     pick: |settings_content| {
                         settings_content
@@ -5139,7 +4692,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.tabs_activate_on_close_title").into(),
                 description: t!("settings_ui.page_data.tabs_activate_on_close_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tabs.activate_on_close"),
                     pick: |settings_content| {
                         settings_content.tabs.as_ref()?.activate_on_close.as_ref()
@@ -5158,7 +4710,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.tabs_show_diagnostics_title").into(),
                 description: t!("settings_ui.page_data.tabs_show_diagnostics_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tabs.show_diagnostics"),
                     pick: |settings_content| {
                         settings_content.tabs.as_ref()?.show_diagnostics.as_ref()
@@ -5177,7 +4728,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.tabs_show_close_button_title").into(),
                 description: t!("settings_ui.page_data.tabs_show_close_button_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("tabs.show_close_button"),
                     pick: |settings_content| {
                         settings_content.tabs.as_ref()?.show_close_button.as_ref()
@@ -5202,7 +4752,7 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.preview_tabs_enabled_title").into(),
                 description: t!("settings_ui.page_data.preview_tabs_enabled_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("preview_tabs.enabled"),
                     pick: |settings_content| {
                         settings_content.preview_tabs.as_ref()?.enabled.as_ref()
@@ -5221,7 +4771,7 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.preview_tabs_enable_preview_from_project_panel_title").into(),
                 description: t!("settings_ui.page_data.preview_tabs_enable_preview_from_project_panel_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("preview_tabs.enable_preview_from_project_panel"),
                     pick: |settings_content| {
                         settings_content
@@ -5244,7 +4794,7 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.preview_tabs_enable_preview_from_file_finder_title").into(),
                 description: t!("settings_ui.page_data.preview_tabs_enable_preview_from_file_finder_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("preview_tabs.enable_preview_from_file_finder"),
                     pick: |settings_content| {
                         settings_content
@@ -5267,7 +4817,7 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.preview_tabs_enable_preview_from_multibuffer_title").into(),
                 description: t!("settings_ui.page_data.preview_tabs_enable_preview_from_multibuffer_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("preview_tabs.enable_preview_from_multibuffer"),
                     pick: |settings_content| {
                         settings_content
@@ -5290,7 +4840,7 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.preview_tabs_enable_preview_multibuffer_from_code_navigation_title").into(),
                 description: t!("settings_ui.page_data.preview_tabs_enable_preview_multibuffer_from_code_navigation_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("preview_tabs.enable_preview_multibuffer_from_code_navigation"),
                     pick: |settings_content| {
                         settings_content
@@ -5313,7 +4863,7 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.preview_tabs_enable_preview_file_from_code_navigation_title").into(),
                 description: t!("settings_ui.page_data.preview_tabs_enable_preview_file_from_code_navigation_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("preview_tabs.enable_preview_file_from_code_navigation"),
                     pick: |settings_content| {
                         settings_content
@@ -5336,7 +4886,7 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.preview_tabs_enable_keep_preview_on_code_navigation_title").into(),
                 description: t!("settings_ui.page_data.preview_tabs_enable_keep_preview_on_code_navigation_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("preview_tabs.enable_keep_preview_on_code_navigation"),
                     pick: |settings_content| {
                         settings_content
@@ -5365,7 +4915,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.bottom_dock_layout_title").into(),
                 description: t!("settings_ui.page_data.bottom_dock_layout_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("bottom_dock_layout"),
                     pick: |settings_content| settings_content.workspace.bottom_dock_layout.as_ref(),
                     write: |settings_content, value, _| {
@@ -5381,7 +4930,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.centered_layout_left_padding_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("centered_layout.left_padding"),
                     pick: |settings_content| {
                         settings_content
@@ -5407,7 +4955,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.centered_layout_right_padding_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("centered_layout.right_padding"),
                     pick: |settings_content| {
                         settings_content
@@ -5432,7 +4979,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.focus_follows_mouse_enabled_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("focus_follows_mouse.enabled"),
                     pick: |settings_content| {
                         settings_content
@@ -5459,7 +5005,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("focus_follows_mouse.debounce_ms"),
                     pick: |settings_content| {
                         settings_content
@@ -5489,7 +5034,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.title_format_title").into(),
                 description: t!("settings_ui.page_data.title_format_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("window_title_format"),
                     pick: |settings_content| {
                         settings_content.workspace.window_title_format.as_ref()
@@ -5509,7 +5053,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.title_separator_title").into(),
                 description: t!("settings_ui.page_data.title_separator_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("window_title_separator"),
                     pick: |settings_content| {
                         settings_content.workspace.window_title_separator.as_ref()
@@ -5529,7 +5072,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.use_system_window_tabs_title").into(),
                 description: t!("settings_ui.page_data.use_system_window_tabs_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("use_system_window_tabs"),
                     pick: |settings_content| {
                         settings_content.workspace.use_system_window_tabs.as_ref()
@@ -5546,7 +5088,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description:
                     "(macOS only) which fullscreen mode the toggle fullscreen action enters.".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("fullscreen_mode"),
                     pick: |settings_content| settings_content.workspace.fullscreen_mode.as_ref(),
                     write: |settings_content, value, _| {
@@ -5560,7 +5101,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.window_decorations_title").into(),
                 description: t!("settings_ui.page_data.window_decorations_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("window_decorations"),
                     pick: |settings_content| settings_content.workspace.window_decorations.as_ref(),
                     write: |settings_content, value, _| {
@@ -5586,7 +5126,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("active_pane_modifiers.inactive_opacity"),
                     pick: |settings_content| {
                         settings_content
@@ -5614,7 +5153,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("active_pane_modifiers.border_size"),
                     pick: |settings_content| {
                         settings_content
@@ -5639,7 +5177,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.zoomed_padding_title").into(),
                 description: t!("settings_ui.page_data.zoomed_padding_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("zoomed_padding"),
                     pick: |settings_content| settings_content.workspace.zoomed_padding.as_ref(),
                     write: |settings_content, value, _| {
@@ -5653,7 +5190,6 @@ fn window_and_layout_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.close_panel_on_toggle_title").into(),
                 description: t!("settings_ui.page_data.close_panel_on_toggle_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("close_panel_on_toggle"),
                     pick: |settings_content| {
                         settings_content.workspace.close_panel_on_toggle.as_ref()
@@ -5678,7 +5214,6 @@ fn window_and_layout_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.pane_split_direction_vertical_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("pane_split_direction_vertical"),
                     pick: |settings_content| {
                         settings_content
@@ -5700,7 +5235,6 @@ fn window_and_layout_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("pane_split_direction_horizontal"),
                     pick: |settings_content| {
                         settings_content
@@ -5744,7 +5278,7 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.project_panel_dock_title").into(),
                 description: t!("settings_ui.page_data.project_panel_dock_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.dock"),
                     pick: |settings_content| settings_content.project_panel.as_ref()?.dock.as_ref(),
                     write: |settings_content, value, _| {
@@ -5759,7 +5293,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_default_width_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.default_width"),
                     pick: |settings_content| {
                         settings_content
@@ -5783,7 +5317,7 @@ fn panels_page() -> SettingsPage {
                     title: t!("settings_ui.page_data.project_panel_title_tooltips_delay_title").into(),
                     description: t!("settings_ui.page_data.project_panel_title_tooltips_delay_description").into(),
                     field: Box::new(SettingField {
-                        organization_override: None,
+
                         json_path: Some("project_panel.title_tooltip_delay$"),
                         pick: |settings_content| {
                             Some(
@@ -5843,7 +5377,7 @@ fn panels_page() -> SettingsPage {
                                 title: t!("settings_ui.page_data.project_panel_title_tooltips_custom_delay_title").into(),
                                 description: t!("settings_ui.page_data.project_panel_title_tooltips_custom_delay_description").into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
+
                                     json_path: Some("project_panel.title_tooltip_delay"),
                                     pick: |settings_content| match settings_content
                                         .project_panel
@@ -5882,7 +5416,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_hide_gitignore_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.hide_gitignore"),
                     pick: |settings_content| {
                         settings_content
@@ -5906,7 +5440,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_entry_spacing_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.entry_spacing"),
                     pick: |settings_content| {
                         settings_content
@@ -5930,7 +5464,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_file_icons_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.file_icons"),
                     pick: |settings_content| {
                         settings_content.project_panel.as_ref()?.file_icons.as_ref()
@@ -5950,7 +5484,7 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.project_panel_folder_icons_title").into(),
                 description: t!("settings_ui.page_data.project_panel_folder_icons_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.folder_indicator"),
                     pick: |settings_content| {
                         settings_content
@@ -5974,7 +5508,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_git_status_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.git_status"),
                     pick: |settings_content| {
                         settings_content.project_panel.as_ref()?.git_status.as_ref()
@@ -5994,7 +5528,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_indent_size_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.indent_size"),
                     pick: |settings_content| {
                         settings_content
@@ -6020,7 +5554,7 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.auto_reveal_entries"),
                     pick: |settings_content| {
                         settings_content
@@ -6044,7 +5578,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_starts_open_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.starts_open"),
                     pick: |settings_content| {
                         settings_content
@@ -6068,7 +5602,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_auto_fold_dirs_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.auto_fold_dirs"),
                     pick: |settings_content| {
                         settings_content
@@ -6094,7 +5628,7 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.bold_folder_labels"),
                     pick: |settings_content| {
                         settings_content
@@ -6118,7 +5652,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_scrollbar_show_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.scrollbar.show"),
                     pick: |settings_content| {
                         show_scrollbar_or_editor(settings_content, |settings_content| {
@@ -6151,7 +5685,7 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.scrollbar.horizontal_scroll"),
                     pick: |settings_content| {
                         settings_content
@@ -6179,7 +5713,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_show_diagnostics_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.show_diagnostics"),
                     pick: |settings_content| {
                         settings_content
@@ -6205,7 +5739,7 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.diagnostic_badges"),
                     pick: |settings_content| {
                         settings_content
@@ -6231,7 +5765,7 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.git_status_indicator"),
                     pick: |settings_content| {
                         settings_content
@@ -6255,7 +5789,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_sticky_scroll_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.sticky_scroll"),
                     pick: |settings_content| {
                         settings_content
@@ -6282,7 +5816,7 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.indent_guides.show"),
                     pick: |settings_content| {
                         settings_content
@@ -6309,7 +5843,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_drag_and_drop_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.drag_and_drop"),
                     pick: |settings_content| {
                         settings_content
@@ -6332,7 +5866,7 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.project_panel_hide_root_title").into(),
                 description: t!("settings_ui.page_data.project_panel_hide_root_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.hide_root"),
                     pick: |settings_content| {
                         settings_content.project_panel.as_ref()?.hide_root.as_ref()
@@ -6352,7 +5886,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_hide_hidden_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.hide_hidden"),
                     pick: |settings_content| {
                         settings_content
@@ -6375,7 +5909,7 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.project_panel_sort_mode_title").into(),
                 description: t!("settings_ui.page_data.project_panel_sort_mode_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.sort_mode"),
                     pick: |settings_content| {
                         settings_content.project_panel.as_ref()?.sort_mode.as_ref()
@@ -6395,7 +5929,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.project_panel_sort_order_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     pick: |settings_content| {
                         settings_content.project_panel.as_ref()?.sort_order.as_ref()
                     },
@@ -6417,7 +5951,7 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.auto_open.on_create"),
                     pick: |settings_content| {
                         settings_content
@@ -6447,7 +5981,7 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.auto_open.on_paste"),
                     pick: |settings_content| {
                         settings_content
@@ -6477,7 +6011,7 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("project_panel.auto_open.on_drop"),
                     pick: |settings_content| {
                         settings_content
@@ -6505,7 +6039,7 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.worktree_hidden_files_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
+
                         json_path: Some("hidden_files"),
                         pick: |settings_content| {
                             settings_content.project.worktree.hidden_files.as_ref()
@@ -6531,7 +6065,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_dock_title").into(),
                 description: t!("settings_ui.page_data.terminal_dock_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.dock"),
                     pick: |settings_content| settings_content.terminal.as_ref()?.dock.as_ref(),
                     write: |settings_content, value, _| {
@@ -6545,7 +6078,6 @@ fn panels_page() -> SettingsPage {
                 title: "Starts Open".into(),
                 description: "Whether the terminal panel should open on startup.".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.starts_open"),
                     pick: |settings_content| {
                         settings_content.terminal.as_ref()?.starts_open.as_ref()
@@ -6564,7 +6096,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_flexible_title").into(),
                 description: t!("settings_ui.page_data.terminal_flexible_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.flexible"),
                     pick: |settings_content| settings_content.terminal.as_ref()?.flexible.as_ref(),
                     write: |settings_content, value, _| {
@@ -6579,7 +6110,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.terminal_show_count_badge_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.show_count_badge"),
                     pick: |settings_content| {
                         settings_content
@@ -6610,7 +6140,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.outline_panel_button_title").into(),
                 description: t!("settings_ui.page_data.outline_panel_button_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.button"),
                     pick: |settings_content| {
                         settings_content.outline_panel.as_ref()?.button.as_ref()
@@ -6629,7 +6158,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.outline_panel_dock_title").into(),
                 description: t!("settings_ui.page_data.outline_panel_dock_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.dock"),
                     pick: |settings_content| settings_content.outline_panel.as_ref()?.dock.as_ref(),
                     write: |settings_content, value, _| {
@@ -6644,7 +6172,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.outline_panel_default_width_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.default_width"),
                     pick: |settings_content| {
                         settings_content
@@ -6668,7 +6195,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.outline_panel_file_icons_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.file_icons"),
                     pick: |settings_content| {
                         settings_content.outline_panel.as_ref()?.file_icons.as_ref()
@@ -6688,7 +6214,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.outline_panel_folder_icons_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.folder_indicator"),
                     pick: |settings_content| {
                         settings_content
@@ -6712,7 +6237,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.outline_panel_git_status_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.git_status"),
                     pick: |settings_content| {
                         settings_content.outline_panel.as_ref()?.git_status.as_ref()
@@ -6732,7 +6256,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.outline_panel_indent_size_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.indent_size"),
                     pick: |settings_content| {
                         settings_content
@@ -6758,7 +6281,6 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.auto_reveal_entries"),
                     pick: |settings_content| {
                         settings_content
@@ -6782,7 +6304,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.outline_panel_auto_fold_dirs_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.auto_fold_dirs"),
                     pick: |settings_content| {
                         settings_content
@@ -6809,7 +6330,6 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.indent_guides.show"),
                     pick: |settings_content| {
                         settings_content
@@ -6836,7 +6356,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.hide_symbols_in_multi_buffers_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("outline_panel.multi_buffer_hide_symbols"),
                     pick: |settings_content| {
                         settings_content
@@ -6865,7 +6384,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_button_title").into(),
                 description: t!("settings_ui.page_data.git_panel_button_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.button"),
                     pick: |settings_content| settings_content.git_panel.as_ref()?.button.as_ref(),
                     write: |settings_content, value, _| {
@@ -6879,7 +6397,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_dock_title").into(),
                 description: t!("settings_ui.page_data.git_panel_dock_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.dock"),
                     pick: |settings_content| settings_content.git_panel.as_ref()?.dock.as_ref(),
                     write: |settings_content, value, _| {
@@ -6893,7 +6410,6 @@ fn panels_page() -> SettingsPage {
                 title: "Starts Open".into(),
                 description: "Whether the git panel should open on startup.".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.starts_open"),
                     pick: |settings_content| {
                         settings_content.git_panel.as_ref()?.starts_open.as_ref()
@@ -6912,7 +6428,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_default_width_title").into(),
                 description: t!("settings_ui.page_data.git_panel_default_width_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.default_width"),
                     pick: |settings_content| {
                         settings_content.git_panel.as_ref()?.default_width.as_ref()
@@ -6931,7 +6446,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_status_style_title").into(),
                 description: t!("settings_ui.page_data.git_panel_status_style_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.status_style"),
                     pick: |settings_content| {
                         settings_content.git_panel.as_ref()?.status_style.as_ref()
@@ -6951,7 +6465,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.git_panel_fallback_branch_name_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.fallback_branch_name"),
                     pick: |settings_content| {
                         settings_content
@@ -6974,7 +6487,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_sort_by_title").into(),
                 description: t!("settings_ui.page_data.git_panel_sort_by_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.sort_by"),
                     pick: |settings_content| settings_content.git_panel.as_ref()?.sort_by.as_ref(),
                     write: |settings_content, value, _| {
@@ -6988,7 +6500,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_group_by_title").into(),
                 description: t!("settings_ui.page_data.git_panel_group_by_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.group_by"),
                     pick: |settings_content| settings_content.git_panel.as_ref()?.group_by.as_ref(),
                     write: |settings_content, value, _| {
@@ -7005,7 +6516,6 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.collapse_untracked_diff"),
                     pick: |settings_content| {
                         settings_content
@@ -7028,7 +6538,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_tree_view_title").into(),
                 description: t!("settings_ui.page_data.git_panel_tree_view_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.tree_view"),
                     pick: |settings_content| {
                         settings_content.git_panel.as_ref()?.tree_view.as_ref()
@@ -7044,7 +6553,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_file_icons_title").into(),
                 description: t!("settings_ui.page_data.git_panel_file_icons_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.file_icons"),
                     pick: |settings_content| {
                         settings_content.git_panel.as_ref()?.file_icons.as_ref()
@@ -7063,7 +6571,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_folder_icons_title").into(),
                 description: t!("settings_ui.page_data.git_panel_folder_icons_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.folder_indicator"),
                     pick: |settings_content| {
                         settings_content
@@ -7086,7 +6593,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_panel_diff_stats_title").into(),
                 description: t!("settings_ui.page_data.git_panel_diff_stats_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.diff_stats"),
                     pick: |settings_content| {
                         settings_content.git_panel.as_ref()?.diff_stats.as_ref()
@@ -7109,7 +6615,6 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.entry_primary_click_action"),
                     pick: |settings_content| {
                         settings_content
@@ -7133,7 +6638,6 @@ fn panels_page() -> SettingsPage {
                 description:
                     "Whether the commit message editor is shown in the Git panel by default.".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.commit_editor"),
                     pick: |settings_content| {
                         settings_content.git_panel.as_ref()?.commit_editor.as_ref()
@@ -7153,7 +6657,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.git_panel_show_count_badge_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.show_count_badge"),
                     pick: |settings_content| {
                         settings_content
@@ -7179,7 +6682,6 @@ fn panels_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.commit_title_max_length"),
                     pick: |settings_content| {
                         settings_content
@@ -7203,7 +6705,6 @@ fn panels_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.git_panel_scrollbar_show_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git_panel.scrollbar.show"),
                     pick: |settings_content| {
                         show_scrollbar_or_editor(settings_content, |settings_content| {
@@ -7240,7 +6741,6 @@ fn panels_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.debugger_dock_title").into(),
                 description: t!("settings_ui.page_data.debugger_dock_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("debugger.dock"),
                     pick: |settings_content| settings_content.debugger.as_ref()?.dock.as_ref(),
                     write: |settings_content, value, _| {
@@ -7253,224 +6753,6 @@ fn panels_page() -> SettingsPage {
         ]
     }
 
-    fn collaboration_panel_section() -> [SettingsPageItem; 4] {
-        [
-            SettingsPageItem::SectionHeader(
-                t!("settings_ui.page_data.collaboration_panel_section").into(),
-            ),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.collaboration_panel_button_title").into(),
-                description: t!("settings_ui.page_data.collaboration_panel_button_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("collaboration_panel.button"),
-                    pick: |settings_content| {
-                        settings_content
-                            .collaboration_panel
-                            .as_ref()?
-                            .button
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .collaboration_panel
-                            .get_or_insert_default()
-                            .button = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.collaboration_panel_dock_title").into(),
-                description: t!("settings_ui.page_data.collaboration_panel_dock_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("collaboration_panel.dock"),
-                    pick: |settings_content| {
-                        settings_content.collaboration_panel.as_ref()?.dock.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .collaboration_panel
-                            .get_or_insert_default()
-                            .dock = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.collaboration_panel_dock_title_2").into(),
-                description: t!("settings_ui.page_data.collaboration_panel_dock_description_2")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("collaboration_panel.dock"),
-                    pick: |settings_content| {
-                        settings_content
-                            .collaboration_panel
-                            .as_ref()?
-                            .default_width
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .collaboration_panel
-                            .get_or_insert_default()
-                            .default_width = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-        ]
-    }
-
-    fn agent_panel_section() -> [SettingsPageItem; 7] {
-        [
-            SettingsPageItem::SectionHeader(t!("settings_ui.page_data.agent_panel_section").into()),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_button_title").into(),
-                description: t!("settings_ui.page_data.agent_button_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.button"),
-                    pick: |settings_content| settings_content.agent.as_ref()?.button.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.agent.get_or_insert_default().button = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_dock_title").into(),
-                description: t!("settings_ui.page_data.agent_dock_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.dock"),
-                    pick: |settings_content| settings_content.agent.as_ref()?.dock.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.agent.get_or_insert_default().dock = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_flexible_title").into(),
-                description: t!("settings_ui.page_data.agent_flexible_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.flexible"),
-                    pick: |settings_content| settings_content.agent.as_ref()?.flexible.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.agent.get_or_insert_default().flexible = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_default_width_title").into(),
-                description: t!("settings_ui.page_data.agent_default_width_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.default_width"),
-                    pick: |settings_content| {
-                        settings_content.agent.as_ref()?.default_width.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content.agent.get_or_insert_default().default_width = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_default_height_title").into(),
-                description: t!("settings_ui.page_data.agent_default_height_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.default_height"),
-                    pick: |settings_content| {
-                        settings_content.agent.as_ref()?.default_height.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .default_height = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::DynamicItem(DynamicItem {
-                discriminant: SettingItem {
-                    files: USER,
-                    title: t!("settings_ui.page_data.agent_limit_content_width_title").into(),
-                    description: t!("settings_ui.page_data.agent_limit_content_width_description")
-                        .into(),
-                    field: Box::new(SettingField::<bool> {
-                        organization_override: None,
-                        json_path: Some("agent.limit_content_width"),
-                        pick: |settings_content| {
-                            settings_content
-                                .agent
-                                .as_ref()?
-                                .limit_content_width
-                                .as_ref()
-                        },
-                        write: |settings_content, value, _| {
-                            settings_content
-                                .agent
-                                .get_or_insert_default()
-                                .limit_content_width = value;
-                        },
-                    }),
-                    metadata: None,
-                },
-                pick_discriminant: |settings_content| {
-                    let enabled = settings_content
-                        .agent
-                        .as_ref()?
-                        .limit_content_width
-                        .unwrap_or(true);
-                    Some(if enabled { 1 } else { 0 })
-                },
-                fields: vec![
-                    vec![],
-                    vec![SettingItem {
-                        files: USER,
-                        title: t!("settings_ui.page_data.agent_max_content_width_title").into(),
-                        description: t!(
-                            "settings_ui.page_data.agent_max_content_width_description"
-                        )
-                        .into(),
-                        field: Box::new(SettingField {
-                            organization_override: None,
-                            json_path: Some("agent.max_content_width"),
-                            pick: |settings_content| {
-                                settings_content.agent.as_ref()?.max_content_width.as_ref()
-                            },
-                            write: |settings_content, value, _| {
-                                settings_content
-                                    .agent
-                                    .get_or_insert_default()
-                                    .max_content_width = value;
-                            },
-                        }),
-                        metadata: None,
-                    }],
-                ],
-            }),
-        ]
-    }
-
     SettingsPage {
         title: t!("settings_ui.page_data.panels_page_title").into(),
         items: concat_sections![
@@ -7479,8 +6761,6 @@ fn panels_page() -> SettingsPage {
             outline_panel_section(),
             git_panel_section(),
             debugger_panel_section(),
-            collaboration_panel_section(),
-            agent_panel_section(),
         ],
     }
 }
@@ -7494,7 +6774,6 @@ fn debugger_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.debugger_stepping_granularity_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("debugger.stepping_granularity"),
                     pick: |settings_content| {
                         settings_content
@@ -7518,7 +6797,6 @@ fn debugger_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.debugger_save_breakpoints_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("debugger.save_breakpoints"),
                     pick: |settings_content| {
                         settings_content
@@ -7541,7 +6819,6 @@ fn debugger_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.debugger_timeout_title").into(),
                 description: t!("settings_ui.page_data.debugger_timeout_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("debugger.timeout"),
                     pick: |settings_content| settings_content.debugger.as_ref()?.timeout.as_ref(),
                     write: |settings_content, value, _| {
@@ -7558,7 +6835,6 @@ fn debugger_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("debugger.log_dap_communications"),
                     pick: |settings_content| {
                         settings_content
@@ -7584,7 +6860,6 @@ fn debugger_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("debugger.format_dap_log_messages"),
                     pick: |settings_content| {
                         settings_content
@@ -7622,7 +6897,7 @@ fn terminal_page() -> SettingsPage {
                         title: t!("settings_ui.page_data.terminal_shell_title").into(),
                         description: t!("settings_ui.page_data.terminal_shell_description").into(),
                         field: Box::new(SettingField {
-                            organization_override: None,
+
                             json_path: Some("terminal.shell$"),
                             pick: |settings_content| {
                                 Some(&dynamic_variants::<settings::Shell>()[
@@ -7704,7 +6979,7 @@ fn terminal_page() -> SettingsPage {
                                 title: t!("settings_ui.page_data.terminal_shell_title_2").into(),
                                 description: t!("settings_ui.page_data.terminal_shell_description_2").into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
+
                                     json_path: Some("terminal.shell"),
                                     pick: |settings_content| match settings_content.terminal.as_ref()?.project.shell.as_ref()
                                     {
@@ -7735,7 +7010,7 @@ fn terminal_page() -> SettingsPage {
                                     title: t!("settings_ui.page_data.terminal_shell_program_title").into(),
                                     description: t!("settings_ui.page_data.terminal_shell_program_description").into(),
                                     field: Box::new(SettingField {
-                                        organization_override: None,
+
                                         json_path: Some("terminal.shell.program"),
                                         pick: |settings_content| {
                                             match settings_content.terminal.as_ref()?.project.shell.as_ref() {
@@ -7769,7 +7044,7 @@ fn terminal_page() -> SettingsPage {
                                     description: t!("settings_ui.page_data.terminal_shell_args_description").into(),
                                     field: Box::new(
                                         SettingField {
-                                            organization_override: None,
+
                                             json_path: Some("terminal.shell.args"),
                                             pick: |settings_content| {
                                                 match settings_content.terminal.as_ref()?.project.shell.as_ref() {
@@ -7802,7 +7077,7 @@ fn terminal_page() -> SettingsPage {
                                     title: t!("settings_ui.page_data.terminal_shell_title_override_title").into(),
                                     description: t!("settings_ui.page_data.terminal_shell_title_override_description").into(),
                                     field: Box::new(SettingField {
-                                        organization_override: None,
+
                                         json_path: Some("terminal.shell.title_override"),
                                         pick: |settings_content| {
                                             match settings_content.terminal.as_ref()?.project.shell.as_ref() {
@@ -7839,7 +7114,7 @@ fn terminal_page() -> SettingsPage {
                         title: t!("settings_ui.page_data.terminal_working_directory_title").into(),
                         description: t!("settings_ui.page_data.terminal_working_directory_description").into(),
                         field: Box::new(SettingField {
-                            organization_override: None,
+
                             json_path: Some("terminal.working_directory$"),
                             pick: |settings_content| {
                                 Some(&dynamic_variants::<settings::WorkingDirectory>()[
@@ -7913,7 +7188,7 @@ fn terminal_page() -> SettingsPage {
                                 title: t!("settings_ui.page_data.terminal_working_directory_always_title").into(),
                                 description: t!("settings_ui.page_data.terminal_working_directory_always_description").into(),
                                 field: Box::new(SettingField {
-                                    organization_override: None,
+
                                     json_path: Some("terminal.working_directory.always"),
                                     pick: |settings_content| {
                                         match settings_content.terminal.as_ref()?.project.working_directory.as_ref() {
@@ -7945,7 +7220,7 @@ fn terminal_page() -> SettingsPage {
                     description: t!("settings_ui.page_data.terminal_env_description").into(),
                     field: Box::new(
                         SettingField {
-                            organization_override: None,
+
                             json_path: Some("terminal.env"),
                             pick: |settings_content| settings_content.terminal.as_ref()?.project.env.as_ref(),
                             write: |settings_content, value, _| {
@@ -7962,7 +7237,7 @@ fn terminal_page() -> SettingsPage {
                     description: t!("settings_ui.page_data.terminal_detect_venv_description").into(),
                     field: Box::new(
                         SettingField {
-                            organization_override: None,
+
                             json_path: Some("terminal.detect_venv"),
                             pick: |settings_content| settings_content.terminal.as_ref()?.project.detect_venv.as_ref(),
                             write: |settings_content, value, _| {
@@ -7988,7 +7263,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_font_size_title").into(),
                 description: t!("settings_ui.page_data.terminal_font_size_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.font_size"),
                     pick: |settings_content| {
                         settings_content
@@ -8008,7 +7282,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_font_family_title").into(),
                 description: t!("settings_ui.page_data.terminal_font_family_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.font_family"),
                     pick: |settings_content| {
                         settings_content
@@ -8032,7 +7305,6 @@ fn terminal_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.terminal_font_fallbacks_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("terminal.font_fallbacks"),
                         pick: |settings_content| {
                             settings_content
@@ -8057,7 +7329,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_font_weight_title").into(),
                 description: t!("settings_ui.page_data.terminal_font_weight_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.font_weight"),
                     pick: |settings_content| {
                         settings_content.terminal.as_ref()?.font_weight.as_ref()
@@ -8077,7 +7348,6 @@ fn terminal_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.terminal_font_features_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("terminal.font_features"),
                         pick: |settings_content| {
                             settings_content
@@ -8111,7 +7381,6 @@ fn terminal_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.terminal_line_height_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("terminal.line_height"),
                         pick: |settings_content| {
                             settings_content.terminal.as_ref()?.line_height.as_ref()
@@ -8132,7 +7401,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_cursor_shape_title").into(),
                 description: t!("settings_ui.page_data.terminal_cursor_shape_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.cursor_shape"),
                     pick: |settings_content| {
                         settings_content.terminal.as_ref()?.cursor_shape.as_ref()
@@ -8151,7 +7419,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_blinking_title").into(),
                 description: t!("settings_ui.page_data.terminal_blinking_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.blinking"),
                     pick: |settings_content| settings_content.terminal.as_ref()?.blinking.as_ref(),
                     write: |settings_content, value, _| {
@@ -8166,7 +7433,6 @@ fn terminal_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.terminal_alternate_scroll_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.alternate_scroll"),
                     pick: |settings_content| {
                         settings_content
@@ -8190,7 +7456,6 @@ fn terminal_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.terminal_minimum_contrast_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.minimum_contrast"),
                     pick: |settings_content| {
                         settings_content
@@ -8221,7 +7486,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_option_as_meta_title").into(),
                 description: t!("settings_ui.page_data.terminal_option_as_meta_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.option_as_meta"),
                     pick: |settings_content| {
                         settings_content.terminal.as_ref()?.option_as_meta.as_ref()
@@ -8240,7 +7504,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_copy_on_select_title").into(),
                 description: t!("settings_ui.page_data.terminal_copy_on_select_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.copy_on_select"),
                     pick: |settings_content| {
                         settings_content.terminal.as_ref()?.copy_on_select.as_ref()
@@ -8262,7 +7525,6 @@ fn terminal_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.keep_selection_on_copy"),
                     pick: |settings_content| {
                         settings_content
@@ -8288,7 +7550,6 @@ fn terminal_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.open_links_in_mouse_mode"),
                     pick: |settings_content| {
                         settings_content
@@ -8311,7 +7572,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_bell_title").into(),
                 description: t!("settings_ui.page_data.terminal_bell_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.bell"),
                     pick: |settings_content| settings_content.terminal.as_ref()?.bell.as_ref(),
                     write: |settings_content, value, _| {
@@ -8333,7 +7593,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_default_width_title").into(),
                 description: t!("settings_ui.page_data.terminal_default_width_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.default_width"),
                     pick: |settings_content| {
                         settings_content.terminal.as_ref()?.default_width.as_ref()
@@ -8352,7 +7611,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_default_height_title").into(),
                 description: t!("settings_ui.page_data.terminal_default_height_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.default_height"),
                     pick: |settings_content| {
                         settings_content.terminal.as_ref()?.default_height.as_ref()
@@ -8382,7 +7640,6 @@ fn terminal_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.max_scroll_history_lines"),
                     pick: |settings_content| {
                         settings_content
@@ -8406,7 +7663,6 @@ fn terminal_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.terminal_scroll_multiplier_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.scroll_multiplier"),
                     pick: |settings_content| {
                         settings_content
@@ -8436,7 +7692,6 @@ fn terminal_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.terminal_toolbar_breadcrumbs_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.toolbar.breadcrumbs"),
                     pick: |settings_content| {
                         settings_content
@@ -8469,7 +7724,6 @@ fn terminal_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.terminal_scrollbar_show_title").into(),
                 description: t!("settings_ui.page_data.terminal_scrollbar_show_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("terminal.scrollbar.show"),
                     pick: |settings_content| {
                         show_scrollbar_or_editor(settings_content, |settings_content| {
@@ -8524,7 +7778,6 @@ fn version_control_page() -> SettingsPage {
                     title: t!("settings_ui.page_data.git_disable_git_title").into(),
                     description: t!("settings_ui.page_data.git_disable_git_description").into(),
                     field: Box::new(SettingField::<bool> {
-                        organization_override: None,
                         json_path: Some("git.disable_git"),
                         pick: |settings_content| {
                             settings_content
@@ -8565,7 +7818,6 @@ fn version_control_page() -> SettingsPage {
                             description: t!("settings_ui.page_data.git_enable_status_description")
                                 .into(),
                             field: Box::new(SettingField::<bool> {
-                                organization_override: None,
                                 json_path: Some("git.enable_status"),
                                 pick: |settings_content| {
                                     settings_content
@@ -8593,7 +7845,6 @@ fn version_control_page() -> SettingsPage {
                             description: t!("settings_ui.page_data.git_enable_diff_description")
                                 .into(),
                             field: Box::new(SettingField::<bool> {
-                                organization_override: None,
                                 json_path: Some("git.enable_diff"),
                                 pick: |settings_content| {
                                     settings_content
@@ -8628,7 +7879,6 @@ fn version_control_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_git_gutter_title").into(),
                 description: t!("settings_ui.page_data.git_git_gutter_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git.git_gutter"),
                     pick: |settings_content| settings_content.git.as_ref()?.git_gutter.as_ref(),
                     write: |settings_content, value, _| {
@@ -8643,7 +7893,6 @@ fn version_control_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_gutter_debounce_title").into(),
                 description: t!("settings_ui.page_data.git_gutter_debounce_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git.gutter_debounce"),
                     pick: |settings_content| {
                         settings_content.git.as_ref()?.gutter_debounce.as_ref()
@@ -8669,7 +7918,6 @@ fn version_control_page() -> SettingsPage {
                     description: t!("settings_ui.page_data.git_inline_blame_enabled_description")
                         .into(),
                     field: Box::new(SettingField {
-                        organization_override: None,
                         json_path: Some("git.inline_blame.enabled"),
                         pick: |settings_content| {
                             settings_content
@@ -8712,7 +7960,6 @@ fn version_control_page() -> SettingsPage {
                         )
                         .into(),
                         field: Box::new(SettingField {
-                            organization_override: None,
                             json_path: Some("git.inline_blame.location"),
                             pick: |settings_content| {
                                 settings_content
@@ -8742,7 +7989,6 @@ fn version_control_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.git_inline_blame_delay_ms_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git.inline_blame.delay_ms"),
                     pick: |settings_content| {
                         settings_content
@@ -8770,7 +8016,6 @@ fn version_control_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.git_inline_blame_padding_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git.inline_blame.padding"),
                     pick: |settings_content| {
                         settings_content
@@ -8798,7 +8043,6 @@ fn version_control_page() -> SettingsPage {
                 description: t!("settings_ui.page_data.git_inline_blame_min_column_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git.inline_blame.min_column"),
                     pick: |settings_content| {
                         settings_content
@@ -8829,7 +8073,6 @@ fn version_control_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git.inline_blame.show_commit_summary"),
                     pick: |settings_content| {
                         settings_content
@@ -8864,7 +8107,6 @@ fn version_control_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_blame_show_avatar_title").into(),
                 description: t!("settings_ui.page_data.git_blame_show_avatar_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git.blame.show_avatar"),
                     pick: |settings_content| {
                         settings_content
@@ -8902,7 +8144,6 @@ fn version_control_page() -> SettingsPage {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git.branch_picker.show_author_name"),
                     pick: |settings_content| {
                         settings_content
@@ -8935,7 +8176,7 @@ fn version_control_page() -> SettingsPage {
                 title: t!("settings_ui.page_data.git_hunk_style_title").into(),
                 description: t!("settings_ui.page_data.git_hunk_style_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("git.hunk_style"),
                     pick: |settings_content| settings_content.git.as_ref()?.hunk_style.as_ref(),
                     write: |settings_content, value, _| {
@@ -8949,7 +8190,7 @@ SettingsPageItem::SettingItem(SettingItem {
                 title: "Diff Base".into(),
                 description: "Whether git features show changes relative to HEAD (uncommitted changes) or to the default branch (all changes on the current branch).".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("git.diff_base"),
                     pick: |settings_content| settings_content.git.as_ref()?.diff_base.as_ref(),
                     write: |settings_content, value, _| {
@@ -8963,7 +8204,7 @@ SettingsPageItem::SettingItem(SettingItem {
                 title: t!("settings_ui.page_data.git_path_style_title").into(),
                 description: t!("settings_ui.page_data.git_path_style_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("git.path_style"),
                     pick: |settings_content| settings_content.git.as_ref()?.path_style.as_ref(),
                     write: |settings_content, value, _| {
@@ -8978,7 +8219,7 @@ SettingsPageItem::SettingItem(SettingItem {
                 description: t!("settings_ui.page_data.git_show_stage_restore_buttons_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("git.show_stage_restore_buttons"),
                     pick: |settings_content| {
                         settings_content
@@ -9008,7 +8249,6 @@ SettingsPageItem::SettingItem(SettingItem {
                 description: t!("settings_ui.page_data.git_file_diff_show_full_file_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("git.file_diff.show_full_file"),
                     pick: |settings_content| {
                         settings_content
@@ -9048,813 +8288,14 @@ SettingsPageItem::SettingItem(SettingItem {
     }
 }
 
-fn collaboration_page() -> SettingsPage {
-    fn calls_section() -> [SettingsPageItem; 3] {
-        [
-            SettingsPageItem::SectionHeader(t!("settings_ui.page_data.calls_section").into()),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.calls_mute_on_join_title").into(),
-                description: t!("settings_ui.page_data.calls_mute_on_join_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("calls.mute_on_join"),
-                    pick: |settings_content| settings_content.calls.as_ref()?.mute_on_join.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.calls.get_or_insert_default().mute_on_join = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.calls_share_on_join_title").into(),
-                description: t!("settings_ui.page_data.calls_share_on_join_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("calls.share_on_join"),
-                    pick: |settings_content| {
-                        settings_content.calls.as_ref()?.share_on_join.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content.calls.get_or_insert_default().share_on_join = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-        ]
-    }
-
-    fn audio_settings() -> [SettingsPageItem; 3] {
-        [
-            SettingsPageItem::ActionLink(ActionLink {
-                title: t!("settings_ui.page_data.test_audio_title").into(),
-                description: Some(t!("settings_ui.page_data.test_audio_description").into()),
-                button_text: t!("settings_ui.page_data.test_audio_button").into(),
-                on_click: Arc::new(|_settings_window, window, cx| {
-                    open_audio_test_window(window, cx);
-                }),
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.audio_experimental_output_audio_device_title")
-                    .into(),
-                description: t!(
-                    "settings_ui.page_data.audio_experimental_output_audio_device_description"
-                )
-                .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("audio.experimental.output_audio_device"),
-                    pick: |settings_content| {
-                        settings_content
-                            .audio
-                            .as_ref()?
-                            .output_audio_device
-                            .as_ref()
-                            .or(DEFAULT_EMPTY_AUDIO_OUTPUT)
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .audio
-                            .get_or_insert_default()
-                            .output_audio_device = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.audio_experimental_input_audio_device_title")
-                    .into(),
-                description: t!(
-                    "settings_ui.page_data.audio_experimental_input_audio_device_description"
-                )
-                .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("audio.experimental.input_audio_device"),
-                    pick: |settings_content| {
-                        settings_content
-                            .audio
-                            .as_ref()?
-                            .input_audio_device
-                            .as_ref()
-                            .or(DEFAULT_EMPTY_AUDIO_INPUT)
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .audio
-                            .get_or_insert_default()
-                            .input_audio_device = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-        ]
-    }
-
-    SettingsPage {
-        title: t!("settings_ui.page_data.collaboration_page_title").into(),
-        items: concat_sections![calls_section(), audio_settings()],
-    }
-}
-
-fn ai_page(cx: &App) -> SettingsPage {
-    fn general_section() -> [SettingsPageItem; 8] {
-        [
-            SettingsPageItem::SectionHeader(t!("settings_ui.page_data.general_section").into()),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.disable_ai_title").into(),
-                description: t!("settings_ui.page_data.disable_ai_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("disable_ai"),
-                    pick: |settings_content| settings_content.project.disable_ai.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.project.disable_ai = value;
-                    },
-                }),
-                metadata: None,
-                files: USER | PROJECT,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_sidebar_side_title").into(),
-                description: t!("settings_ui.page_data.agent_sidebar_side_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.threads_sidebar.position"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .threads_sidebar
-                            .as_ref()?
-                            .position
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .set_threads_sidebar_position(value);
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.threads_sidebar_default_width_title").into(),
-                description: t!("settings_ui.page_data.threads_sidebar_default_width_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.threads_sidebar.default_width"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .threads_sidebar
-                            .as_ref()?
-                            .default_width
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .set_threads_sidebar_default_width(value);
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.threads_sidebar_auto_open_title").into(),
-                description: t!("settings_ui.page_data.threads_sidebar_auto_open_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.threads_sidebar.auto_open"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .threads_sidebar
-                            .as_ref()?
-                            .auto_open
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .set_threads_sidebar_auto_open(value);
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SubPageLink(SubPageLink {
-                title: t!("settings_ui.page_data.llm_providers_title").into(),
-                r#type: Default::default(),
-                json_path: Some("llm_providers"),
-                description: Some(t!("settings_ui.page_data.llm_providers_description").into()),
-                search_aliases: &[
-                    "ai",
-                    "amazon",
-                    "anthropic",
-                    "api key",
-                    "azure",
-                    "bedrock",
-                    "chat",
-                    "claude",
-                    "copilot",
-                    "gemini",
-                    "github",
-                    "google",
-                    "gpt",
-                    "grok",
-                    "llama",
-                    "llm",
-                    "lm studio",
-                    "mistral",
-                    "ollama",
-                    "openai",
-                    "opencode",
-                    "provider",
-                    "vercel",
-                    "xai",
-                ],
-                in_json: false,
-                files: USER,
-                render: render_llm_providers_page,
-            }),
-            SettingsPageItem::SubPageLink(SubPageLink {
-                title: t!("settings_ui.page_data.external_agents_title").into(),
-                r#type: Default::default(),
-                json_path: Some("agent_servers"),
-                description: Some(t!("settings_ui.page_data.external_agents_description").into()),
-                search_aliases: &[
-                    "acp",
-                    "agent client protocol",
-                    "amp",
-                    "claude agent",
-                    "claude code",
-                    "codex",
-                    "copilot cli",
-                    "cursor",
-                    "external agent",
-                    "factory droid",
-                    "github copilot",
-                    "grok build",
-                    "junie",
-                    "opencode",
-                ],
-                in_json: false,
-                files: USER,
-                render: render_external_agents_page,
-            }),
-            SettingsPageItem::SubPageLink(SubPageLink {
-                title: t!("settings_ui.page_data.mcp_servers_title").into(),
-                r#type: Default::default(),
-                json_path: Some("context_servers"),
-                description: Some(t!("settings_ui.page_data.mcp_servers_description").into()),
-                search_aliases: &["context server", "mcp", "model context protocol"],
-                in_json: false,
-                files: USER,
-                render: render_mcp_servers_page,
-            }),
-        ]
-    }
-
-    fn agent_configuration_section(_cx: &App) -> Box<[SettingsPageItem]> {
-        let mut items = vec![SettingsPageItem::SectionHeader(
-            t!("settings_ui.page_data.agent_configuration_section").into(),
-        )];
-
-        items.extend([
-            SettingsPageItem::SubPageLink(SubPageLink {
-                title: t!("settings_ui.page_data.skills_title").into(),
-                r#type: Default::default(),
-                json_path: Some(zed_actions::AGENT_SKILLS_SETTINGS_PATH),
-                description: Some(t!("settings_ui.page_data.skills_description").into()),
-                search_aliases: &[
-                    "agent skill",
-                    "agent skills",
-                    "custom instructions",
-                    "skill",
-                    "skills",
-                ],
-                in_json: false,
-                files: USER | PROJECT,
-                render: render_skills_setup_page,
-            }),
-            SettingsPageItem::SubPageLink(SubPageLink {
-                title: t!("settings_ui.page_data.sandbox_title").into(),
-                r#type: Default::default(),
-                json_path: Some(zed_actions::AGENT_SANDBOX_SETTINGS_PATH),
-                description: Some(t!("settings_ui.page_data.sandbox_description").into()),
-                search_aliases: &[
-                    "allow",
-                    "domain",
-                    "filesystem",
-                    "network",
-                    "sandbox",
-                    "unsandboxed",
-                    "permissions",
-                ],
-                in_json: true,
-                files: USER,
-                render: render_sandbox_settings_page,
-            }),
-            SettingsPageItem::SubPageLink(SubPageLink {
-                title: t!("settings_ui.page_data.tool_permissions_title").into(),
-                r#type: Default::default(),
-                json_path: Some("agent.tool_permissions"),
-                description: Some(t!("settings_ui.page_data.tool_permissions_description").into()),
-                search_aliases: &[],
-                in_json: true,
-                files: USER,
-                render: render_tool_permissions_setup_page,
-            }),
-        ]);
-
-        items.extend([
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_single_file_review_title").into(),
-                description: t!("settings_ui.page_data.agent_single_file_review_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.single_file_review"),
-                    pick: |settings_content| {
-                        settings_content.agent.as_ref()?.single_file_review.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .single_file_review = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.ai_enable_feedback_title").into(),
-                description: t!("settings_ui.page_data.ai_enable_feedback_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: Some(|org_config| {
-                        if org_config.is_agent_thread_feedback_enabled {
-                            None
-                        } else {
-                            Some(&false)
-                        }
-                    }),
-                    json_path: Some("agent.enable_feedback"),
-                    pick: |settings_content| {
-                        settings_content.agent.as_ref()?.enable_feedback.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .enable_feedback = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_notify_when_agent_waiting_title").into(),
-                description: t!(
-                    "settings_ui.page_data.agent_notify_when_agent_waiting_description"
-                )
-                .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.notify_when_agent_waiting"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .notify_when_agent_waiting
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .notify_when_agent_waiting = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_play_sound_when_agent_done_title").into(),
-                description: t!(
-                    "settings_ui.page_data.agent_play_sound_when_agent_done_description"
-                )
-                .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.play_sound_when_agent_done"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .play_sound_when_agent_done
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .play_sound_when_agent_done = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_prevent_idle_sleep_title").into(),
-                description: t!("settings_ui.page_data.agent_prevent_idle_sleep_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.prevent_idle_sleep"),
-                    pick: |settings_content| {
-                        settings_content.agent.as_ref()?.prevent_idle_sleep.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .prevent_idle_sleep = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: "Max Idle Threads".into(),
-                description: "Maximum number of idle agent threads with loadable sessions to keep loaded. When the limit is exceeded, the least recently updated threads are unloaded.".into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.max_idle_retained_threads"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .max_idle_retained_threads
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .max_idle_retained_threads = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_expand_edit_card_title").into(),
-                description: t!("settings_ui.page_data.agent_expand_edit_card_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.expand_edit_card"),
-                    pick: |settings_content| {
-                        settings_content.agent.as_ref()?.expand_edit_card.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .expand_edit_card = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_expand_terminal_card_title").into(),
-                description: t!("settings_ui.page_data.agent_expand_terminal_card_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.expand_terminal_card"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .expand_terminal_card
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .expand_terminal_card = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_terminal_init_command_title").into(),
-                description: t!("settings_ui.page_data.agent_terminal_init_command_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.terminal_init_command"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .terminal_init_command
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .terminal_init_command = value;
-                    },
-                }),
-                metadata: Some(Box::new(SettingsFieldMetadata {
-                    placeholder: Some("e.g. claude"),
-                    display_confirm_button: true,
-                    display_clear_button: true,
-                    confirm_on_focus_out: true,
-                    treat_missing_text_as_empty: true,
-                    ..Default::default()
-                })),
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_thinking_display_title").into(),
-                description: t!("settings_ui.page_data.agent_thinking_display_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.thinking_display"),
-                    pick: |settings_content| {
-                        settings_content.agent.as_ref()?.thinking_display.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .thinking_display = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_cancel_generation_on_terminal_stop_title")
-                    .into(),
-                description: t!(
-                    "settings_ui.page_data.agent_cancel_generation_on_terminal_stop_description"
-                )
-                .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.cancel_generation_on_terminal_stop"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .cancel_generation_on_terminal_stop
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .cancel_generation_on_terminal_stop = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_use_modifier_to_send_title").into(),
-                description: t!("settings_ui.page_data.agent_use_modifier_to_send_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.use_modifier_to_send"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .use_modifier_to_send
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .use_modifier_to_send = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_message_editor_min_lines_title").into(),
-                description: t!("settings_ui.page_data.agent_message_editor_min_lines_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.message_editor_min_lines"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .message_editor_min_lines
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .message_editor_min_lines = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_show_turn_stats_title").into(),
-                description: t!("settings_ui.page_data.agent_show_turn_stats_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.show_turn_stats"),
-                    pick: |settings_content| {
-                        settings_content.agent.as_ref()?.show_turn_stats.as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .show_turn_stats = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_show_merge_conflict_indicator_title").into(),
-                description: t!(
-                    "settings_ui.page_data.agent_show_merge_conflict_indicator_description"
-                )
-                .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.show_merge_conflict_indicator"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .show_merge_conflict_indicator
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .show_merge_conflict_indicator = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-        ]);
-
-        items.extend([
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_auto_compact_enabled_title").into(),
-                description: t!("settings_ui.page_data.agent_auto_compact_enabled_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.auto_compact.enabled"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .auto_compact
-                            .as_ref()?
-                            .enabled
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .auto_compact
-                            .get_or_insert_default()
-                            .enabled = value;
-                    },
-                }),
-                metadata: None,
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.agent_auto_compact_threshold_title").into(),
-                description: t!("settings_ui.page_data.agent_auto_compact_threshold_description")
-                    .into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("agent.auto_compact.threshold"),
-                    pick: |settings_content| {
-                        settings_content
-                            .agent
-                            .as_ref()?
-                            .auto_compact
-                            .as_ref()?
-                            .threshold
-                            .as_ref()
-                    },
-                    write: |settings_content, value, _| {
-                        settings_content
-                            .agent
-                            .get_or_insert_default()
-                            .auto_compact
-                            .get_or_insert_default()
-                            .threshold = value;
-                    },
-                }),
-                metadata: Some(Box::new(SettingsFieldMetadata {
-                    placeholder: Some("90%"),
-                    ..Default::default()
-                })),
-                files: USER,
-            }),
-        ]);
-
-        items.into_boxed_slice()
-    }
-
-    fn edit_prediction_display_sub_section() -> [SettingsPageItem; 1] {
-        [SettingsPageItem::SettingItem(SettingItem {
-            title: t!("settings_ui.page_data.edit_prediction_display_mode_title").into(),
-            description: t!("settings_ui.page_data.edit_prediction_display_mode_description")
-                .into(),
-            field: Box::new(SettingField {
-                organization_override: None,
-                json_path: Some("edit_prediction.display_mode"),
-                pick: |settings_content| {
-                    settings_content
-                        .project
-                        .all_languages
-                        .edit_predictions
-                        .as_ref()?
-                        .mode
-                        .as_ref()
-                },
-                write: |settings_content, value, _| {
-                    settings_content
-                        .project
-                        .all_languages
-                        .edit_predictions
-                        .get_or_insert_default()
-                        .mode = value;
-                },
-            }),
-            metadata: None,
-            files: USER,
-        })]
-    }
-
-    SettingsPage {
-        title: t!("settings_ui.page_data.ai_page_title").into(),
-        items: concat_sections!(
-            @vec,
-            general_section(),
-            agent_configuration_section(cx),
-            edit_prediction_language_settings_section(),
-            edit_prediction_display_sub_section(),
-        )
-        .into(),
-    }
-}
-
 fn network_page() -> SettingsPage {
-    fn network_section() -> [SettingsPageItem; 3] {
+    fn network_section() -> [SettingsPageItem; 2] {
         [
             SettingsPageItem::SectionHeader(t!("settings_ui.page_data.network_section").into()),
             SettingsPageItem::SettingItem(SettingItem {
                 title: t!("settings_ui.page_data.proxy_title").into(),
                 description: t!("settings_ui.page_data.proxy_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("proxy"),
                     pick: |settings_content| settings_content.proxy.as_ref(),
                     write: |settings_content, value, _| {
@@ -9863,23 +8304,6 @@ fn network_page() -> SettingsPage {
                 }),
                 metadata: Some(Box::new(SettingsFieldMetadata {
                     placeholder: Some("socks5h://localhost:10808"),
-                    ..Default::default()
-                })),
-                files: USER,
-            }),
-            SettingsPageItem::SettingItem(SettingItem {
-                title: t!("settings_ui.page_data.server_url_title").into(),
-                description: t!("settings_ui.page_data.server_url_description").into(),
-                field: Box::new(SettingField {
-                    organization_override: None,
-                    json_path: Some("server_url"),
-                    pick: |settings_content| settings_content.server_url.as_ref(),
-                    write: |settings_content, value, _| {
-                        settings_content.server_url = value;
-                    },
-                }),
-                metadata: Some(Box::new(SettingsFieldMetadata {
-                    placeholder: Some("https://zed.dev"),
                     ..Default::default()
                 })),
                 files: USER,
@@ -9937,7 +8361,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 description: t!("settings_ui.page_data.languages_language_tab_size_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).tab_size"), // TODO(cameron): not JQ syntax because not URL-safe
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -9958,7 +8381,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 description: t!("settings_ui.page_data.languages_language_hard_tabs_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).hard_tabs"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -9979,7 +8401,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 description: t!("settings_ui.page_data.languages_language_auto_indent_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).auto_indent"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10003,7 +8424,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).auto_indent_on_paste"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10030,7 +8450,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 description: t!("settings_ui.page_data.languages_language_soft_wrap_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).soft_wrap"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10050,7 +8469,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: "Soft Wrap Indent".into(),
                 description: "How to indent soft-wrapped lines.".into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).soft_wrap_indent"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10073,7 +8491,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).show_wrap_guides"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10097,7 +8514,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).preferred_line_length"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10119,7 +8535,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                     .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("languages.$(language).wrap_guides"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -10148,7 +8563,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).allow_rewrap"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10174,7 +8588,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_indent_guides_enabled_title").into(),
                 description: t!("settings_ui.page_data.languages_language_indent_guides_enabled_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).indent_guides.enabled"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10197,7 +8611,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_indent_guides_line_width_title").into(),
                 description: t!("settings_ui.page_data.languages_language_indent_guides_line_width_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).indent_guides.line_width"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10220,7 +8634,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_indent_guides_active_line_width_title").into(),
                 description: t!("settings_ui.page_data.languages_language_indent_guides_active_line_width_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).indent_guides.active_line_width"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10246,7 +8660,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_indent_guides_coloring_title").into(),
                 description: t!("settings_ui.page_data.languages_language_indent_guides_coloring_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).indent_guides.coloring"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10269,7 +8683,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_indent_guides_background_coloring_title").into(),
                 description: t!("settings_ui.page_data.languages_language_indent_guides_background_coloring_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).indent_guides.background_coloring"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10302,7 +8716,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 field: Box::new(
                     // TODO(settings_ui): this setting should just be a bool
                     SettingField {
-                        organization_override: None,
+
                         json_path: Some("languages.$(language).format_on_save"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -10327,7 +8741,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_remove_trailing_whitespace_on_save_title").into(),
                 description: t!("settings_ui.page_data.languages_language_remove_trailing_whitespace_on_save_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).remove_trailing_whitespace_on_save"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10347,7 +8761,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_ensure_final_newline_on_save_title").into(),
                 description: t!("settings_ui.page_data.languages_language_ensure_final_newline_on_save_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).ensure_final_newline_on_save"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10367,7 +8781,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_line_ending_title").into(),
                 description: t!("settings_ui.page_data.languages_language_line_ending_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).line_ending"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10391,7 +8805,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 description: t!("settings_ui.page_data.languages_language_formatter_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
+
                         json_path: Some("languages.$(language).formatter"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -10417,7 +8831,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_use_on_type_format_title").into(),
                 description: t!("settings_ui.page_data.languages_language_use_on_type_format_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).use_on_type_format"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10438,7 +8852,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 description: t!("settings_ui.page_data.languages_language_code_actions_on_format_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
+
                         json_path: Some("languages.$(language).code_actions_on_format"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -10470,7 +8884,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_use_autoclose_title").into(),
                 description: t!("settings_ui.page_data.languages_language_use_autoclose_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).use_autoclose"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10490,7 +8904,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_use_auto_surround_title").into(),
                 description: t!("settings_ui.page_data.languages_language_use_auto_surround_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).use_auto_surround"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10510,7 +8924,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_always_treat_brackets_as_autoclosed_title").into(),
                 description: t!("settings_ui.page_data.languages_language_always_treat_brackets_as_autoclosed_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).always_treat_brackets_as_autoclosed"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10530,7 +8944,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_jsx_tag_auto_close_title").into(),
                 description: t!("settings_ui.page_data.languages_language_jsx_tag_auto_close_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).jsx_tag_auto_close"),
                     // TODO(settings_ui): this setting should just be a bool
                     pick: |settings_content| {
@@ -10560,7 +8974,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).show_whitespaces"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10585,7 +8998,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("languages.$(language).whitespace_map.space"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -10616,7 +9028,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("languages.$(language).whitespace_map.tab"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -10648,7 +9059,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_show_completions_on_input_title").into(),
                 description: t!("settings_ui.page_data.languages_language_show_completions_on_input_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).show_completions_on_input"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10668,7 +9079,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_show_completion_documentation_title").into(),
                 description: t!("settings_ui.page_data.languages_language_show_completion_documentation_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).show_completion_documentation"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10688,7 +9099,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_completions_words_title").into(),
                 description: t!("settings_ui.page_data.languages_language_completions_words_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).completions.words"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10708,7 +9119,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_completions_words_min_length_title").into(),
                 description: t!("settings_ui.page_data.languages_language_completions_words_min_length_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).completions.words_min_length"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10731,7 +9142,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.editor_completion_menu_scrollbar_title").into(),
                 description: t!("settings_ui.page_data.editor_completion_menu_scrollbar_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("editor.completion_menu_scrollbar"),
                     pick: |settings_content| {
                         settings_content.editor.completion_menu_scrollbar.as_ref()
@@ -10747,7 +9158,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.editor_completion_detail_alignment_title").into(),
                 description: t!("settings_ui.page_data.editor_completion_detail_alignment_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("editor.completion_detail_alignment"),
                     pick: |settings_content| {
                         settings_content.editor.completion_detail_alignment.as_ref()
@@ -10763,7 +9174,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.editor_completion_menu_item_kind_title").into(),
                 description: t!("settings_ui.page_data.editor_completion_menu_item_kind_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("editor.completion_menu_item_kind"),
                     pick: |settings_content| {
                         settings_content.editor.completion_menu_item_kind.as_ref()
@@ -10785,7 +9196,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_inlay_hints_enabled_title").into(),
                 description: t!("settings_ui.page_data.languages_language_inlay_hints_enabled_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).inlay_hints.enabled"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10805,7 +9216,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_inlay_hints_show_value_hints_title").into(),
                 description: t!("settings_ui.page_data.languages_language_inlay_hints_show_value_hints_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).inlay_hints.show_value_hints"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10828,7 +9239,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_inlay_hints_show_type_hints_title").into(),
                 description: t!("settings_ui.page_data.languages_language_inlay_hints_show_type_hints_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).inlay_hints.show_type_hints"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10848,7 +9259,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_inlay_hints_show_parameter_hints_title").into(),
                 description: t!("settings_ui.page_data.languages_language_inlay_hints_show_parameter_hints_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).inlay_hints.show_parameter_hints"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10871,7 +9282,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_inlay_hints_show_other_hints_title").into(),
                 description: t!("settings_ui.page_data.languages_language_inlay_hints_show_other_hints_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).inlay_hints.show_other_hints"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10894,7 +9305,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_inlay_hints_show_background_title").into(),
                 description: t!("settings_ui.page_data.languages_language_inlay_hints_show_background_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).inlay_hints.show_background"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10914,7 +9325,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_inlay_hints_edit_debounce_ms_title").into(),
                 description: t!("settings_ui.page_data.languages_language_inlay_hints_edit_debounce_ms_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).inlay_hints.edit_debounce_ms"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10937,7 +9348,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_inlay_hints_scroll_debounce_ms_title").into(),
                 description: t!("settings_ui.page_data.languages_language_inlay_hints_scroll_debounce_ms_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).inlay_hints.scroll_debounce_ms"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -10961,7 +9372,7 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 description: t!("settings_ui.page_data.network_toggle_on_modifiers_press_description").into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
+
                         json_path: Some(
                             "languages.$(language).inlay_hints.toggle_on_modifiers_press",
                         ),
@@ -11005,7 +9416,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).tasks.enabled"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11029,7 +9439,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("languages.$(language).tasks.variables"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -11058,7 +9467,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).tasks.prefer_lsp"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11086,7 +9494,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.language_detection_title").into(),
                 description: t!("settings_ui.page_data.language_detection_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("language_detection"),
                     pick: |settings_content| settings_content.editor.language_detection.as_ref(),
                     write: |settings_content, value, _| {
@@ -11104,7 +9511,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).word_diff_enabled"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11126,7 +9532,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                     .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("languages.$(language).debuggers"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -11158,7 +9563,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).editor.middle_click_paste"),
                     pick: |settings_content| settings_content.editor.middle_click_paste.as_ref(),
                     write: |settings_content, value, _| {
@@ -11178,7 +9582,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).extend_comment_on_newline"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11202,7 +9605,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).colorize_brackets"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11222,7 +9624,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.modeline_lines_title").into(),
                 description: t!("settings_ui.page_data.modeline_lines_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("modeline_lines"),
                     pick: |settings_content| settings_content.modeline_lines.as_ref(),
                     write: |settings_content, value, _| {
@@ -11241,7 +9642,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.image_viewer_unit_title").into(),
                 description: t!("settings_ui.page_data.image_viewer_unit_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("image_viewer.unit"),
                     pick: |settings_content| {
                         settings_content
@@ -11261,7 +9661,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 description: t!("settings_ui.page_data.open_markdown_files_in_preview_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("markdown_preview.open_markdown_files_in_preview"),
                     pick: |settings_content| {
                         settings_content
@@ -11290,7 +9689,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                     )
                     .into(),
                     field: Box::new(SettingField::<bool> {
-                        organization_override: None,
                         json_path: Some("markdown_preview.limit_content_width"),
                         pick: |settings_content| {
                             settings_content
@@ -11326,7 +9724,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                         )
                         .into(),
                         field: Box::new(SettingField {
-                            organization_override: None,
                             json_path: Some("markdown_preview.max_width"),
                             pick: |settings_content| {
                                 settings_content
@@ -11350,7 +9747,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.drop_target_size_title").into(),
                 description: t!("settings_ui.page_data.drop_target_size_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("drop_target_size"),
                     pick: |settings_content| settings_content.workspace.drop_target_size.as_ref(),
                     write: |settings_content, value, _| {
@@ -11369,7 +9765,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
         title: t!("settings_ui.page_data.code_lens_title").into(),
         description: t!("settings_ui.page_data.code_lens_description").into(),
         field: Box::new(SettingField {
-            organization_override: None,
             json_path: Some("code_lens"),
             pick: |settings_content| settings_content.editor.code_lens.as_ref(),
             write: |settings_content, value, _| {
@@ -11384,7 +9779,6 @@ fn language_settings_data() -> Box<[SettingsPageItem]> {
         title: t!("settings_ui.page_data.lsp_document_colors_title").into(),
         description: t!("settings_ui.page_data.lsp_document_colors_description").into(),
         field: Box::new(SettingField {
-            organization_override: None,
             json_path: Some("lsp_document_colors"),
             pick: |settings_content| settings_content.editor.lsp_document_colors.as_ref(),
             write: |settings_content, value, _| {
@@ -11442,7 +9836,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).enable_language_server"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11466,7 +9859,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("languages.$(language).language_servers"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -11495,7 +9887,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).linked_edits"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11516,7 +9907,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 description: t!("settings_ui.page_data.go_to_definition_fallback_description")
                     .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("go_to_definition_fallback"),
                     pick: |settings_content| {
                         settings_content.editor.go_to_definition_fallback.as_ref()
@@ -11535,7 +9925,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("go_to_definition_scroll_strategy"),
                     pick: |settings_content| {
                         settings_content
@@ -11554,7 +9943,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.lsp_results_location_title").into(),
                 description: t!("settings_ui.page_data.lsp_results_location_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("lsp_results_location"),
                     pick: |settings_content| settings_content.editor.lsp_results_location.as_ref(),
                     write: |settings_content, value, _| {
@@ -11582,7 +9970,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                         .clone()
                 },
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).semantic_tokens"),
                     pick: |settings_content| {
                         settings_content
@@ -11611,7 +9998,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).document_folding_ranges"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11634,7 +10020,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).document_symbols"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11660,7 +10045,7 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_completions_lsp_title").into(),
                 description: t!("settings_ui.page_data.languages_language_completions_lsp_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).completions.lsp"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11680,7 +10065,7 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_completions_lsp_fetch_timeout_ms_title").into(),
                 description: t!("settings_ui.page_data.languages_language_completions_lsp_fetch_timeout_ms_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).completions.lsp_fetch_timeout_ms"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11703,7 +10088,7 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 title: t!("settings_ui.page_data.languages_language_completions_lsp_insert_mode_title").into(),
                 description: t!("settings_ui.page_data.languages_language_completions_lsp_insert_mode_description").into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
+
                     json_path: Some("languages.$(language).completions.lsp_insert_mode"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11731,7 +10116,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                     .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("languages.$(language).debuggers"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -11766,7 +10150,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).prettier.allowed"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11789,7 +10172,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 )
                 .into(),
                 field: Box::new(SettingField {
-                    organization_override: None,
                     json_path: Some("languages.$(language).prettier.parser"),
                     pick: |settings_content| {
                         language_settings_field(settings_content, |language| {
@@ -11813,7 +10195,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("languages.$(language).prettier.plugins"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -11843,7 +10224,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
                 .into(),
                 field: Box::new(
                     SettingField {
-                        organization_override: None,
                         json_path: Some("languages.$(language).prettier.options"),
                         pick: |settings_content| {
                             language_settings_field(settings_content, |language| {
@@ -11874,113 +10254,6 @@ fn non_editor_language_settings_data() -> Box<[SettingsPageItem]> {
         debugger_section(),
         prettier_section(),
     )
-}
-
-fn edit_prediction_language_settings_section() -> [SettingsPageItem; 5] {
-    [
-        SettingsPageItem::SectionHeader(
-            t!("settings_ui.page_data.edit_predictions_section").into(),
-        ),
-        SettingsPageItem::SubPageLink(SubPageLink {
-            title: t!("settings_ui.page_data.configure_providers_title").into(),
-            r#type: Default::default(),
-            json_path: Some("edit_predictions.providers"),
-            description: Some(t!("settings_ui.page_data.configure_providers_description").into()),
-            search_aliases: &[],
-            in_json: false,
-            files: USER,
-            render: render_edit_prediction_setup_page,
-        }),
-        SettingsPageItem::SettingItem(SettingItem {
-            title: t!("settings_ui.page_data.network_data_collection_title").into(),
-            description: t!("settings_ui.page_data.network_data_collection_description").into(),
-            field: Box::new(SettingField {
-                organization_override: Some(|org_settings| {
-                    const DATA_COLLECTION_DISABLED: EditPredictionDataCollectionChoice =
-                        EditPredictionDataCollectionChoice::No;
-
-                    if !org_settings.edit_prediction.is_feedback_enabled {
-                        Some(&DATA_COLLECTION_DISABLED)
-                    } else {
-                        None
-                    }
-                }),
-                json_path: Some("edit_predictions.allow_data_collection"),
-                pick: |settings_content| {
-                    settings_content
-                        .project
-                        .all_languages
-                        .edit_predictions
-                        .as_ref()?
-                        .allow_data_collection
-                        .as_ref()
-                },
-                write: |settings_content, value, _app| {
-                    settings_content
-                        .project
-                        .all_languages
-                        .edit_predictions
-                        .get_or_insert_default()
-                        .allow_data_collection = value;
-                },
-            }),
-            metadata: None,
-            files: USER,
-        }),
-        SettingsPageItem::SettingItem(SettingItem {
-            title: t!("settings_ui.page_data.languages_language_show_edit_predictions_title")
-                .into(),
-            description: t!(
-                "settings_ui.page_data.languages_language_show_edit_predictions_description"
-            )
-            .into(),
-            field: Box::new(SettingField {
-                organization_override: None,
-                json_path: Some("languages.$(language).show_edit_predictions"),
-                pick: |settings_content| {
-                    language_settings_field(settings_content, |language| {
-                        language.show_edit_predictions.as_ref()
-                    })
-                },
-                write: |settings_content, value, _| {
-                    language_settings_field_mut(settings_content, value, |language, value| {
-                        language.show_edit_predictions = value;
-                    })
-                },
-            }),
-            metadata: None,
-            files: USER | PROJECT,
-        }),
-        SettingsPageItem::SettingItem(SettingItem {
-            title: t!(
-                "settings_ui.page_data.languages_language_edit_predictions_disabled_in_title"
-            )
-            .into(),
-            description: t!(
-                "settings_ui.page_data.languages_language_edit_predictions_disabled_in_description"
-            )
-            .into(),
-            field: Box::new(
-                SettingField {
-                    organization_override: None,
-                    json_path: Some("languages.$(language).edit_predictions_disabled_in"),
-                    pick: |settings_content| {
-                        language_settings_field(settings_content, |language| {
-                            language.edit_predictions_disabled_in.as_ref()
-                        })
-                    },
-                    write: |settings_content, value, _| {
-                        language_settings_field_mut(settings_content, value, |language, value| {
-                            language.edit_predictions_disabled_in = value;
-                        })
-                    },
-                }
-                .unimplemented(),
-            ),
-            metadata: None,
-            files: USER | PROJECT,
-        }),
-    ]
 }
 
 fn show_scrollbar_or_editor(

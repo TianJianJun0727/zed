@@ -1,12 +1,9 @@
 use crate::{BufferDiagnosticsEditor, ProjectDiagnosticsEditor, ToggleDiagnosticsRefresh};
-use agent_settings::AgentSettings;
 use gpui::{Context, EventEmitter, ParentElement, Render, Window};
 use language::DiagnosticEntry;
-use settings::Settings;
 use text::{Anchor, BufferId};
 use ui::{Tooltip, prelude::*};
 use workspace::{ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView, item::ItemHandle};
-use zed_actions::assistant::InlineAssist;
 use zed_actions::buffer_search;
 use zed_i18n::t;
 
@@ -49,8 +46,6 @@ impl Render for ToolbarControls {
             None => {}
         }
 
-        let is_agent_enabled = AgentSettings::get_global(cx).enabled(cx);
-
         let (warning_tooltip, warning_color) = if include_warnings {
             (t!("diagnostics.toolbar.exclude_warnings"), Color::Warning)
         } else {
@@ -69,19 +64,6 @@ impl Render for ToolbarControls {
                     .on_click(|_, window, cx| {
                         window.dispatch_action(Box::new(buffer_search::Deploy::find()), cx);
                     })
-            })
-            .when(is_agent_enabled, |this| {
-                this.child(
-                    IconButton::new("inline_assist", IconName::ZedAssistant)
-                        .icon_size(IconSize::Small)
-                        .tooltip(Tooltip::for_action_title(
-                            t!("diagnostics.toolbar.inline_assist"),
-                            &InlineAssist::default(),
-                        ))
-                        .on_click(|_, window, cx| {
-                            window.dispatch_action(Box::new(InlineAssist::default()), cx);
-                        }),
-                )
             })
             .map(|div| {
                 if is_updating {

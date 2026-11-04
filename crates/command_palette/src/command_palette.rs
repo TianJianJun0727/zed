@@ -9,7 +9,6 @@ use std::{
 };
 
 use anyhow::Context as _;
-use client::parse_zed_link;
 use command_palette_hooks::{
     CommandInterceptItem, CommandInterceptResult, CommandPaletteFilter,
     GlobalCommandPaletteInterceptor,
@@ -31,7 +30,7 @@ use ui::{
 };
 use util::ResultExt;
 use workspace::{ModalView, Workspace, WorkspaceSettings};
-use zed_actions::{OpenZedUrl, command_palette::Toggle};
+use zed_actions::command_palette::Toggle;
 use zed_i18n::t;
 
 actions!(command_palette, [RemoveSelected]);
@@ -600,14 +599,12 @@ impl PickerDelegate for CommandPaletteDelegate {
         let (mut tx, mut rx) = postage::dispatch::channel(1);
 
         let query_str = query.as_str();
-        let is_zed_link = parse_zed_link(query_str, cx).is_some();
 
         let task = cx.background_spawn({
             let mut commands = self.all_commands.clone();
             let command_usage = self.command_usage(cx);
             let executor = cx.background_executor().clone();
             let query = normalize_action_query(query_str);
-            let query_for_link = query_str.to_string();
             async move {
                 for command in &mut commands {
                     command.usage = command_usage.get(&command.name).copied();
@@ -643,19 +640,7 @@ impl PickerDelegate for CommandPaletteDelegate {
                     }
                 });
 
-                let intercept_result = if is_zed_link {
-                    CommandInterceptResult {
-                        results: vec![CommandInterceptItem {
-                            action: OpenZedUrl {
-                                url: query_for_link.clone().into(),
-                            }
-                            .boxed_clone(),
-                            string: query_for_link,
-                            positions: vec![],
-                        }],
-                        exclusive: false,
-                    }
-                } else if let Some(task) = intercept_task {
+                let intercept_result = if let Some(task) = intercept_task {
                     task.await
                 } else {
                     CommandInterceptResult::default()
@@ -745,11 +730,7 @@ impl PickerDelegate for CommandPaletteDelegate {
 
         let action_ix = self.matches[self.selected_ix].candidate_id;
         let command = self.commands.swap_remove(action_ix);
-        telemetry::event!(
-            "Action Invoked",
-            source = "command palette",
-            action = command.name
-        );
+
         self.matches.clear();
         self.commands.clear();
         let command_name = command.name.clone();

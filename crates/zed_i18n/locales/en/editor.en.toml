@@ -1,7 +1,6 @@
 _version = 1
 
 [editor.mouse_context_menu]
-add_to_agent_thread = "Add to Agent Thread"
 copy = "Copy"
 copy_and_trim = "Copy and Trim"
 evaluate_selection = "Evaluate Selection"

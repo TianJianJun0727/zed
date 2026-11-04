@@ -1,5 +1,0 @@
-_version = 1
-
-[remote_connection]
-caps_lock_on = "Caps lock is on."
-cancel = "Cancel"

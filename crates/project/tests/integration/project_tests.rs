@@ -1,9 +1,7 @@
 #![allow(clippy::format_collect)]
 
-mod agent_registry_store;
 mod bookmark_store;
 mod color_extractor;
-mod context_server_store;
 mod debugger;
 mod dynamic_registration;
 mod git_store;
@@ -62,7 +60,7 @@ use project::{
     Event, TaskContexts,
     git_store::{GitStoreEvent, Repository, RepositoryEvent, StatusEntry, pending_op},
     search::{SearchQuery, SearchResult},
-    task_store::{TaskSettingsLocation, TaskStore},
+    task_store::TaskSettingsLocation,
     *,
 };
 use rand::{Rng as _, rngs::StdRng};
@@ -1153,7 +1151,6 @@ async fn test_git_provider_project_setting(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_managing_project_specific_settings(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    TaskStore::init(None);
 
     let fs = FakeFs::new(cx.executor());
     fs.insert_tree(
@@ -1356,7 +1353,6 @@ async fn test_managing_project_specific_settings(cx: &mut gpui::TestAppContext) 
 #[gpui::test]
 async fn test_invalid_local_tasks_shows_toast_with_doc_link(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    TaskStore::init(None);
 
     // We need to start with a valid `.zed/tasks.json` file as otherwise the
     // event is emitted before we havd a chance to setup the event subscription.
@@ -1414,7 +1410,6 @@ async fn test_invalid_local_tasks_shows_toast_with_doc_link(cx: &mut gpui::TestA
 #[gpui::test]
 async fn test_fallback_to_single_worktree_tasks(cx: &mut gpui::TestAppContext) {
     init_test(cx);
-    TaskStore::init(None);
 
     let fs = FakeFs::new(cx.executor());
     fs.insert_tree(
@@ -9087,7 +9082,7 @@ async fn test_save_as_existing_file(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test(retries = 5)]
-async fn test_rescan_and_remote_updates(cx: &mut gpui::TestAppContext) {
+async fn test_rescan_updates_local_buffers(cx: &mut gpui::TestAppContext) {
     use worktree::WorktreeModelHandle as _;
 
     init_test(cx);
@@ -9132,29 +9127,7 @@ async fn test_rescan_and_remote_updates(cx: &mut gpui::TestAppContext) {
     let file3_id = id_for_path("a/file3", cx);
     let file4_id = id_for_path("b/c/file4", cx);
 
-    // Create a remote copy of this worktree.
     let tree = project.update(cx, |project, cx| project.worktrees(cx).next().unwrap());
-    let metadata = tree.update(cx, |tree, _| tree.metadata_proto());
-
-    let updates = Arc::new(Mutex::new(Vec::new()));
-    tree.update(cx, |tree, cx| {
-        let updates = updates.clone();
-        tree.observe_updates(0, cx, move |update| {
-            updates.lock().push(update);
-            async { true }
-        });
-    });
-
-    let remote = cx.update(|cx| {
-        Worktree::remote(
-            0,
-            ReplicaId::REMOTE_SERVER,
-            metadata,
-            project.read(cx).client().into(),
-            project.read(cx).path_style(cx),
-            cx,
-        )
-    });
 
     cx.executor().run_until_parked();
 
@@ -9225,31 +9198,6 @@ async fn test_rescan_and_remote_updates(cx: &mut gpui::TestAppContext) {
         assert_eq!(
             buffer5.read(cx).file().unwrap().disk_state(),
             DiskState::Deleted
-        );
-    });
-
-    // Update the remote worktree. Check that it becomes consistent with the
-    // local worktree.
-    cx.executor().run_until_parked();
-
-    remote.update(cx, |remote, _| {
-        for update in updates.lock().drain(..) {
-            remote.as_remote_mut().unwrap().update_from_remote(update);
-        }
-    });
-    cx.executor().run_until_parked();
-    remote.update(cx, |remote, _| {
-        assert_eq!(
-            remote.paths().collect::<Vec<_>>(),
-            vec![
-                rel_path("a"),
-                rel_path("a/file1"),
-                rel_path("a/file2.new"),
-                rel_path("b"),
-                rel_path("d"),
-                rel_path("d/file3"),
-                rel_path("d/file4"),
-            ]
         );
     });
 }
@@ -21317,158 +21265,6 @@ async fn test_read_only_files_with_lock_files(cx: &mut gpui::TestAppContext) {
     package_json.read_with(cx, |buffer, _| {
         assert!(!buffer.read_only(), "package.json should not be read-only");
     });
-}
-
-mod disable_ai_settings_tests {
-    use gpui::TestAppContext;
-    use project::*;
-    use settings::{Settings, SettingsStore};
-
-    #[gpui::test]
-    async fn test_disable_ai_settings_security(cx: &mut TestAppContext) {
-        cx.update(|cx| {
-            settings::init(cx);
-
-            // Test 1: Default is false (AI enabled)
-            assert!(
-                !DisableAiSettings::get_global(cx).disable_ai,
-                "Default should allow AI"
-            );
-        });
-
-        let disable_true = serde_json::json!({
-            "disable_ai": true
-        })
-        .to_string();
-        let disable_false = serde_json::json!({
-            "disable_ai": false
-        })
-        .to_string();
-
-        cx.update_global::<SettingsStore, _>(|store, cx| {
-            store.set_user_settings(&disable_false, cx).unwrap();
-            store.set_global_settings(&disable_true, cx).unwrap();
-        });
-        cx.update(|cx| {
-            assert!(
-                DisableAiSettings::get_global(cx).disable_ai,
-                "Local false cannot override global true"
-            );
-        });
-
-        cx.update_global::<SettingsStore, _>(|store, cx| {
-            store.set_global_settings(&disable_false, cx).unwrap();
-            store.set_user_settings(&disable_true, cx).unwrap();
-        });
-
-        cx.update(|cx| {
-            assert!(
-                DisableAiSettings::get_global(cx).disable_ai,
-                "Local false cannot override global true"
-            );
-        });
-    }
-
-    #[gpui::test]
-    async fn test_disable_ai_project_level_settings(cx: &mut TestAppContext) {
-        use settings::{LocalSettingsKind, LocalSettingsPath, SettingsLocation, SettingsStore};
-        use worktree::WorktreeId;
-
-        cx.update(|cx| {
-            settings::init(cx);
-
-            // Default should allow AI
-            assert!(
-                !DisableAiSettings::get_global(cx).disable_ai,
-                "Default should allow AI"
-            );
-        });
-
-        let worktree_id = WorktreeId::from_usize(1);
-        let rel_path = |path: &str| -> std::sync::Arc<util::rel_path::RelPath> {
-            std::sync::Arc::from(util::rel_path::RelPath::from_unix_str(path).unwrap())
-        };
-        let project_path = rel_path("project");
-        let settings_location = SettingsLocation {
-            worktree_id,
-            path: project_path.as_ref(),
-        };
-
-        // Test: Project-level disable_ai=true should disable AI for files in that project
-        cx.update_global::<SettingsStore, _>(|store, cx| {
-            store
-                .set_local_settings(
-                    worktree_id,
-                    LocalSettingsPath::InWorktree(project_path.clone()),
-                    LocalSettingsKind::Settings,
-                    Some(r#"{ "disable_ai": true }"#),
-                    cx,
-                )
-                .unwrap();
-        });
-
-        cx.update(|cx| {
-            let settings = DisableAiSettings::get(Some(settings_location), cx);
-            assert!(
-                settings.disable_ai,
-                "Project-level disable_ai=true should disable AI for files in that project"
-            );
-            // Global should now also be true since project-level disable_ai is merged into global
-            assert!(
-                DisableAiSettings::get_global(cx).disable_ai,
-                "Global setting should be affected by project-level disable_ai=true"
-            );
-        });
-
-        // Test: Setting project-level to false should allow AI for that project
-        cx.update_global::<SettingsStore, _>(|store, cx| {
-            store
-                .set_local_settings(
-                    worktree_id,
-                    LocalSettingsPath::InWorktree(project_path.clone()),
-                    LocalSettingsKind::Settings,
-                    Some(r#"{ "disable_ai": false }"#),
-                    cx,
-                )
-                .unwrap();
-        });
-
-        cx.update(|cx| {
-            let settings = DisableAiSettings::get(Some(settings_location), cx);
-            assert!(
-                !settings.disable_ai,
-                "Project-level disable_ai=false should allow AI"
-            );
-            // Global should also be false now
-            assert!(
-                !DisableAiSettings::get_global(cx).disable_ai,
-                "Global setting should be false when project-level is false"
-            );
-        });
-
-        // Test: User-level true + project-level false = AI disabled (saturation)
-        let disable_true = serde_json::json!({ "disable_ai": true }).to_string();
-        cx.update_global::<SettingsStore, _>(|store, cx| {
-            store.set_user_settings(&disable_true, cx).unwrap();
-            store
-                .set_local_settings(
-                    worktree_id,
-                    LocalSettingsPath::InWorktree(project_path.clone()),
-                    LocalSettingsKind::Settings,
-                    Some(r#"{ "disable_ai": false }"#),
-                    cx,
-                )
-                .unwrap();
-        });
-
-        cx.update(|cx| {
-            let settings = DisableAiSettings::get(Some(settings_location), cx);
-            assert!(
-                settings.disable_ai,
-                "Project-level false cannot override user-level true (SaturatingBool)"
-            );
-        });
-    }
 }
 
 #[gpui::test]

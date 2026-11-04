@@ -53,6 +53,20 @@ pub enum ExtensionProvides {
 }
 
 impl ExtensionProvides {
+    // Registry responses can contain unsupported capabilities from existing extensions.
+    pub fn is_supported(&self) -> bool {
+        matches!(
+            self,
+            Self::Languages
+                | Self::Themes
+                | Self::IconThemes
+                | Self::Grammars
+                | Self::LanguageServers
+                | Self::DebugAdapters
+                | Self::Snippets
+        )
+    }
+
     pub fn is_deprecated(&self) -> bool {
         matches!(
             self,

@@ -6,15 +6,13 @@ use gpui::{
     MouseButton, ParentElement, StatefulInteractiveElement, Styled, WeakEntity, Window,
     WindowButtonLayout, WindowControlArea, div, px,
 };
-use project::DisableAiSettings;
-use settings::Settings;
 use smallvec::SmallVec;
 use std::mem;
 use ui::{
     prelude::*,
     utils::{TRAFFIC_LIGHT_PADDING, platform_title_bar_height},
 };
-use workspace::{MultiWorkspace, SidebarRenderState, SidebarSide};
+use workspace::MultiWorkspace;
 
 use crate::{
     platforms::{platform_linux, platform_windows},
@@ -123,18 +121,6 @@ impl PlatformTitleBar {
     pub fn init(cx: &mut App) {
         SystemWindowTabs::init(cx);
     }
-
-    fn sidebar_render_state(&self, cx: &App) -> SidebarRenderState {
-        self.multi_workspace
-            .as_ref()
-            .and_then(|mw| mw.upgrade())
-            .map(|mw| mw.read(cx).sidebar_render_state(cx))
-            .unwrap_or_default()
-    }
-
-    pub fn is_multi_workspace_enabled(cx: &App) -> bool {
-        !DisableAiSettings::get_global(cx).disable_ai
-    }
 }
 
 /// Renders the platform-appropriate left-side window controls (e.g. Ubuntu/GNOME close button).
@@ -213,7 +199,6 @@ impl Render for PlatformTitleBar {
         let children = mem::take(&mut self.children);
 
         let button_layout = self.effective_button_layout(&decorations, cx);
-        let sidebar = self.sidebar_render_state(cx);
 
         let title_bar = h_flex()
             .window_control_area(WindowControlArea::Drag)
@@ -266,7 +251,7 @@ impl Render for PlatformTitleBar {
                     )
             })
             .map(|this| {
-                let show_left_controls = !(sidebar.open && sidebar.side == SidebarSide::Left);
+                let show_left_controls = true;
 
                 if window.is_fullscreen() || window.is_simple_fullscreen() {
                     this.pl_2()
@@ -290,16 +275,12 @@ impl Render for PlatformTitleBar {
             .map(|el| match decorations {
                 Decorations::Server => el,
                 Decorations::Client { tiling, .. } => el
-                    .when(
-                        !(tiling.top || tiling.right)
-                            && !(sidebar.open && sidebar.side == SidebarSide::Right),
-                        |el| el.rounded_tr(theme::CLIENT_SIDE_DECORATION_ROUNDING),
-                    )
-                    .when(
-                        !(tiling.top || tiling.left)
-                            && !(sidebar.open && sidebar.side == SidebarSide::Left),
-                        |el| el.rounded_tl(theme::CLIENT_SIDE_DECORATION_ROUNDING),
-                    )
+                    .when(!(tiling.top || tiling.right), |el| {
+                        el.rounded_tr(theme::CLIENT_SIDE_DECORATION_ROUNDING)
+                    })
+                    .when(!(tiling.top || tiling.left), |el| {
+                        el.rounded_tl(theme::CLIENT_SIDE_DECORATION_ROUNDING)
+                    })
                     // Keep in sync with `apply_title_bar_insets`.
                     .mt(-theme::CLIENT_SIDE_DECORATION_BORDER)
                     .mb(-theme::CLIENT_SIDE_DECORATION_BORDER)
@@ -322,7 +303,7 @@ impl Render for PlatformTitleBar {
             .when(
                 !window.is_fullscreen() && !window.is_simple_fullscreen(),
                 |title_bar| {
-                    let show_right_controls = !(sidebar.open && sidebar.side == SidebarSide::Right);
+                    let show_right_controls = true;
 
                     let title_bar = title_bar.children(
                         show_right_controls

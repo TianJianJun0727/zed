@@ -1,21 +1,17 @@
 use anyhow::Context as _;
 use collections::HashMap;
-use context_server::ContextServerCommand;
 use dap::adapters::DebugAdapterName;
 use fs::Fs;
 use futures::StreamExt as _;
 use git::repository::DEFAULT_WORKTREE_DIRECTORY;
-use gpui::{AsyncApp, BorrowAppContext, Context, Entity, EventEmitter, Subscription, Task};
+use gpui::{BorrowAppContext, Context, Entity, EventEmitter, Subscription, Task};
 use lsp::{DEFAULT_LSP_REQUEST_TIMEOUT_SECS, LanguageServerName};
 use paths::{
     EDITORCONFIG_NAME, debug_task_file_name, local_debug_file_relative_path,
     local_settings_file_relative_path, local_tasks_file_relative_path,
     local_vscode_launch_file_relative_path, local_vscode_tasks_file_relative_path, task_file_name,
 };
-use rpc::{
-    AnyProtoClient, TypedEnvelope,
-    proto::{self, REMOTE_SERVER_PROJECT_ID},
-};
+use rpc::proto::{self, REMOTE_SERVER_PROJECT_ID};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 pub use settings::BinarySettings;
@@ -28,7 +24,7 @@ use settings::{
 };
 use std::{cell::OnceCell, collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 use task::{DebugTaskFile, TaskTemplates, VsCodeDebugTaskFile, VsCodeTaskFile};
-use util::{ResultExt, rel_path::RelPath, serde::default_true};
+use util::{ResultExt, rel_path::RelPath};
 use worktree::{PathChange, UpdatedEntriesSet, Worktree, WorktreeId};
 
 use crate::{
@@ -59,12 +55,6 @@ pub struct ProjectSettings {
     /// Configuration for Debugger-related features
     pub dap: HashMap<DebugAdapterName, DapSettings>,
 
-    /// Settings for context servers used for AI-related features.
-    pub context_servers: HashMap<Arc<str>, ContextServerSettings>,
-
-    /// Default timeout for context server requests in seconds.
-    pub context_server_timeout: u64,
-
     /// Configuration for Diagnostics-related features.
     pub diagnostics: DiagnosticsSettings,
 
@@ -92,7 +82,7 @@ pub struct SessionSettings {
     pub restore_unsaved_buffers: bool,
     /// Whether or not to skip worktree trust checks.
     /// When trusted, project settings are synchronized automatically,
-    /// language and MCP servers are downloaded and started automatically.
+    /// language servers are downloaded and started automatically.
     ///
     /// Default: false
     pub trust_all_worktrees: bool,
@@ -178,171 +168,6 @@ impl Default for LspNotificationSettings {
     fn default() -> Self {
         Self {
             dismiss_timeout_ms: Some(5000),
-        }
-    }
-}
-
-#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, JsonSchema, Debug)]
-#[serde(tag = "source", rename_all = "snake_case")]
-pub enum ContextServerSettings {
-    Stdio {
-        /// Whether the context server is enabled.
-        #[serde(default = "default_true")]
-        enabled: bool,
-        /// If true, run this server on the remote server when using remote development.
-        #[serde(default)]
-        remote: bool,
-        #[serde(flatten)]
-        command: ContextServerCommand,
-    },
-    Http {
-        /// Whether the context server is enabled.
-        #[serde(default = "default_true")]
-        enabled: bool,
-        /// The URL of the remote context server.
-        url: String,
-        /// Optional authentication configuration for the remote server.
-        #[serde(skip_serializing_if = "HashMap::is_empty", default)]
-        headers: HashMap<String, String>,
-        /// Timeout for tool calls in milliseconds.
-        timeout: Option<u64>,
-        /// Pre-registered OAuth client credentials for authorization servers that
-        /// require out-of-band client registration.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        oauth: Option<OAuthClientSettings>,
-    },
-    Extension {
-        /// Whether the context server is enabled.
-        #[serde(default = "default_true")]
-        enabled: bool,
-        /// If true, run this server on the remote server when using remote development.
-        #[serde(default)]
-        remote: bool,
-        /// The settings for this context server specified by the extension.
-        ///
-        /// Consult the documentation for the context server to see what settings
-        /// are supported.
-        settings: serde_json::Value,
-    },
-}
-
-impl From<settings::ContextServerSettingsContent> for ContextServerSettings {
-    fn from(value: settings::ContextServerSettingsContent) -> Self {
-        match value {
-            settings::ContextServerSettingsContent::Stdio {
-                enabled,
-                remote,
-                command,
-            } => ContextServerSettings::Stdio {
-                enabled,
-                remote,
-                command,
-            },
-            settings::ContextServerSettingsContent::Extension {
-                enabled,
-                remote,
-                settings,
-            } => ContextServerSettings::Extension {
-                enabled,
-                remote,
-                settings,
-            },
-            settings::ContextServerSettingsContent::Http {
-                enabled,
-                url,
-                headers,
-                timeout,
-                oauth,
-            } => ContextServerSettings::Http {
-                enabled,
-                url,
-                headers,
-                timeout,
-                oauth: oauth.map(|o| OAuthClientSettings {
-                    client_id: o.client_id,
-                    client_secret: o.client_secret,
-                }),
-            },
-        }
-    }
-}
-impl Into<settings::ContextServerSettingsContent> for ContextServerSettings {
-    fn into(self) -> settings::ContextServerSettingsContent {
-        match self {
-            ContextServerSettings::Stdio {
-                enabled,
-                remote,
-                command,
-            } => settings::ContextServerSettingsContent::Stdio {
-                enabled,
-                remote,
-                command,
-            },
-            ContextServerSettings::Extension {
-                enabled,
-                remote,
-                settings,
-            } => settings::ContextServerSettingsContent::Extension {
-                enabled,
-                remote,
-                settings,
-            },
-            ContextServerSettings::Http {
-                enabled,
-                url,
-                headers,
-                timeout,
-                oauth,
-            } => settings::ContextServerSettingsContent::Http {
-                enabled,
-                url,
-                headers,
-                timeout,
-                oauth: oauth.map(|o| settings::OAuthClientSettings {
-                    client_id: o.client_id,
-                    client_secret: o.client_secret,
-                }),
-            },
-        }
-    }
-}
-
-/// Pre-registered OAuth client credentials for MCP servers that don't support
-/// Dynamic Client Registration.
-#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, JsonSchema, Debug)]
-pub struct OAuthClientSettings {
-    /// The OAuth client ID obtained from out-of-band registration with the
-    /// authorization server.
-    pub client_id: String,
-    /// The OAuth client secret, if this is a confidential client. For security,
-    /// prefer providing this interactively; we will prompt and store it in
-    /// the system keychain.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub client_secret: Option<String>,
-}
-
-impl ContextServerSettings {
-    pub fn default_extension() -> Self {
-        Self::Extension {
-            enabled: true,
-            remote: false,
-            settings: serde_json::json!({}),
-        }
-    }
-
-    pub fn enabled(&self) -> bool {
-        match self {
-            ContextServerSettings::Stdio { enabled, .. } => *enabled,
-            ContextServerSettings::Http { enabled, .. } => *enabled,
-            ContextServerSettings::Extension { enabled, .. } => *enabled,
-        }
-    }
-
-    pub fn set_enabled(&mut self, enabled: bool) {
-        match self {
-            ContextServerSettings::Stdio { enabled: e, .. } => *e = enabled,
-            ContextServerSettings::Http { enabled: e, .. } => *e = enabled,
-            ContextServerSettings::Extension { enabled: e, .. } => *e = enabled,
         }
     }
 }
@@ -721,13 +546,6 @@ impl Settings for ProjectSettings {
                 .unwrap_or_else(|| DEFAULT_WORKTREE_DIRECTORY.to_string()),
         };
         Self {
-            context_servers: project
-                .context_servers
-                .clone()
-                .into_iter()
-                .map(|(key, value)| (key, value.into()))
-                .collect(),
-            context_server_timeout: project.context_server_timeout.unwrap_or(60),
             lsp: project
                 .lsp
                 .clone()
@@ -806,7 +624,7 @@ impl Settings for ProjectSettings {
 
 pub enum SettingsObserverMode {
     Local(Arc<dyn Fs>),
-    Remote { via_collab: bool },
+    Remote,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -822,7 +640,7 @@ impl EventEmitter<SettingsObserverEvent> for SettingsObserver {}
 
 pub struct SettingsObserver {
     mode: SettingsObserverMode,
-    downstream_client: Option<AnyProtoClient>,
+
     worktree_store: Entity<WorktreeStore>,
     project_id: u64,
     task_store: Entity<TaskStore>,
@@ -841,11 +659,6 @@ pub struct SettingsObserver {
 /// In ssh mode it also monitors ~/.config/zed/{settings, task}.json and sends the content
 /// upstream.
 impl SettingsObserver {
-    pub fn init(client: &AnyProtoClient) {
-        client.add_entity_message_handler(Self::handle_update_worktree_settings);
-        client.add_entity_message_handler(Self::handle_update_user_settings);
-    }
-
     pub fn new_local(
         fs: Arc<dyn Fs>,
         worktree_store: Entity<WorktreeStore>,
@@ -879,25 +692,6 @@ impl SettingsObserver {
                                             &settings_contents,
                                             cx,
                                         );
-                                        if let Some(downstream_client) =
-                                            &settings_observer.downstream_client
-                                        {
-                                            downstream_client
-                                                .send(proto::UpdateWorktreeSettings {
-                                                    project_id: settings_observer.project_id,
-                                                    worktree_id: worktree_id.to_proto(),
-                                                    path: path.to_proto(),
-                                                    content: settings_contents,
-                                                    kind: Some(
-                                                        local_settings_kind_to_proto(
-                                                            LocalSettingsKind::Settings,
-                                                        )
-                                                        .into(),
-                                                    ),
-                                                    outside_worktree: Some(false),
-                                                })
-                                                .log_err();
-                                        }
                                     }
                                 }
                             }
@@ -929,7 +723,6 @@ impl SettingsObserver {
                                 LocalSettingsKind::Editorconfig,
                                 content.clone(),
                             )],
-                            false,
                             cx,
                         );
                     }
@@ -941,7 +734,7 @@ impl SettingsObserver {
             worktree_store,
             task_store,
             mode: SettingsObserverMode::Local(fs.clone()),
-            downstream_client: None,
+
             _trusted_worktrees_watcher,
             pending_local_settings: HashMap::default(),
             _user_settings_watcher: None,
@@ -966,173 +759,6 @@ impl SettingsObserver {
                 Task::ready(())
             },
         }
-    }
-
-    pub fn new_remote(
-        fs: Arc<dyn Fs>,
-        worktree_store: Entity<WorktreeStore>,
-        task_store: Entity<TaskStore>,
-        upstream_client: Option<AnyProtoClient>,
-        via_collab: bool,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let mut user_settings_watcher = None;
-        if cx.try_global::<SettingsStore>().is_some() {
-            if let Some(upstream_client) = upstream_client {
-                let mut user_settings = None;
-                user_settings_watcher = Some(cx.observe_global::<SettingsStore>(move |_, cx| {
-                    if let Some(new_settings) = cx.global::<SettingsStore>().raw_user_settings() {
-                        if Some(new_settings) != user_settings.as_ref() {
-                            if let Some(new_settings_string) =
-                                serde_json::to_string(new_settings).ok()
-                            {
-                                user_settings = Some(new_settings.clone());
-                                upstream_client
-                                    .send(proto::UpdateUserSettings {
-                                        project_id: REMOTE_SERVER_PROJECT_ID,
-                                        contents: new_settings_string,
-                                    })
-                                    .log_err();
-                            }
-                        }
-                    }
-                }));
-            }
-        };
-
-        Self {
-            worktree_store,
-            task_store,
-            mode: SettingsObserverMode::Remote { via_collab },
-            downstream_client: None,
-            project_id: REMOTE_SERVER_PROJECT_ID,
-            _trusted_worktrees_watcher: None,
-            pending_local_settings: HashMap::default(),
-            _user_settings_watcher: user_settings_watcher,
-            _editorconfig_watcher: None,
-            _global_task_config_watcher: Self::subscribe_to_global_task_file_changes(
-                fs.clone(),
-                paths::tasks_file().clone(),
-                cx,
-            ),
-            _global_debug_config_watcher: Self::subscribe_to_global_debug_scenarios_changes(
-                fs.clone(),
-                paths::debug_scenarios_file().clone(),
-                cx,
-            ),
-        }
-    }
-
-    pub fn shared(
-        &mut self,
-        project_id: u64,
-        downstream_client: AnyProtoClient,
-        cx: &mut Context<Self>,
-    ) {
-        self.project_id = project_id;
-        self.downstream_client = Some(downstream_client.clone());
-
-        let store = cx.global::<SettingsStore>();
-        for worktree in self.worktree_store.read(cx).worktrees() {
-            let worktree_id = worktree.read(cx).id().to_proto();
-            for (path, content) in store.local_settings(worktree.read(cx).id()) {
-                let content = serde_json::to_string(&content).unwrap();
-                downstream_client
-                    .send(proto::UpdateWorktreeSettings {
-                        project_id,
-                        worktree_id,
-                        path: path.as_unix_str().to_owned(),
-                        content: Some(content),
-                        kind: Some(
-                            local_settings_kind_to_proto(LocalSettingsKind::Settings).into(),
-                        ),
-                        outside_worktree: Some(false),
-                    })
-                    .log_err();
-            }
-            for (path, content, _) in store
-                .editorconfig_store
-                .read(cx)
-                .local_editorconfig_settings(worktree.read(cx).id())
-            {
-                downstream_client
-                    .send(proto::UpdateWorktreeSettings {
-                        project_id,
-                        worktree_id,
-                        path: path.to_proto(),
-                        content: Some(content.to_owned()),
-                        kind: Some(
-                            local_settings_kind_to_proto(LocalSettingsKind::Editorconfig).into(),
-                        ),
-                        outside_worktree: Some(path.is_outside_worktree()),
-                    })
-                    .log_err();
-            }
-        }
-    }
-
-    pub fn unshared(&mut self, _: &mut Context<Self>) {
-        self.downstream_client = None;
-    }
-
-    async fn handle_update_worktree_settings(
-        this: Entity<Self>,
-        envelope: TypedEnvelope<proto::UpdateWorktreeSettings>,
-        mut cx: AsyncApp,
-    ) -> anyhow::Result<()> {
-        let kind = match envelope.payload.kind {
-            Some(kind) => proto::LocalSettingsKind::try_from(kind)
-                .ok()
-                .with_context(|| format!("unknown kind {kind}"))?,
-            None => proto::LocalSettingsKind::Settings,
-        };
-
-        let path = LocalSettingsPath::from_proto(
-            &envelope.payload.path,
-            envelope.payload.outside_worktree.unwrap_or(false),
-        )?;
-
-        this.update(&mut cx, |this, cx| {
-            let is_via_collab = match &this.mode {
-                SettingsObserverMode::Local(..) => false,
-                SettingsObserverMode::Remote { via_collab } => *via_collab,
-            };
-            let worktree_id = WorktreeId::from_proto(envelope.payload.worktree_id);
-            let Some(worktree) = this
-                .worktree_store
-                .read(cx)
-                .worktree_for_id(worktree_id, cx)
-            else {
-                return;
-            };
-
-            this.update_settings(
-                worktree,
-                [(
-                    path,
-                    local_settings_kind_from_proto(kind),
-                    envelope.payload.content,
-                )],
-                is_via_collab,
-                cx,
-            );
-        });
-        Ok(())
-    }
-
-    async fn handle_update_user_settings(
-        _: Entity<Self>,
-        envelope: TypedEnvelope<proto::UpdateUserSettings>,
-        cx: AsyncApp,
-    ) -> anyhow::Result<()> {
-        cx.update_global(|settings_store: &mut SettingsStore, cx| {
-            settings_store
-                .set_user_settings(&envelope.payload.contents, cx)
-                .result()
-                .context("setting new user settings")?;
-            anyhow::Ok(())
-        })?;
-        Ok(())
     }
 
     fn on_worktree_store_event(
@@ -1328,7 +954,6 @@ impl SettingsObserver {
                                 content.and_then(|c| c.log_err()),
                             )
                         }),
-                        false,
                         cx,
                     )
                 })
@@ -1343,17 +968,12 @@ impl SettingsObserver {
         settings_contents: impl IntoIterator<
             Item = (LocalSettingsPath, LocalSettingsKind, Option<String>),
         >,
-        is_via_collab: bool,
         cx: &mut Context<Self>,
     ) {
         let worktree_id = worktree.read(cx).id();
         let remote_worktree_id = worktree.read(cx).id();
         let task_store = self.task_store.clone();
-        let can_trust_worktree = if is_via_collab {
-            OnceCell::from(true)
-        } else {
-            OnceCell::new()
-        };
+        let can_trust_worktree = OnceCell::new();
         for (directory_path, kind, file_content) in settings_contents {
             let mut applied = true;
             match (&directory_path, kind) {
@@ -1455,20 +1075,7 @@ impl SettingsObserver {
                 }
             };
 
-            if applied {
-                if let Some(downstream_client) = &self.downstream_client {
-                    downstream_client
-                        .send(proto::UpdateWorktreeSettings {
-                            project_id: self.project_id,
-                            worktree_id: remote_worktree_id.to_proto(),
-                            path: directory_path.to_proto(),
-                            content: file_content.clone(),
-                            kind: Some(local_settings_kind_to_proto(kind).into()),
-                            outside_worktree: Some(directory_path.is_outside_worktree()),
-                        })
-                        .log_err();
-                }
-            }
+            if applied {}
         }
     }
 

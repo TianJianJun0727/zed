@@ -11,7 +11,7 @@ use zed_i18n::t;
 type ContextMenuBuilder = Box<
     dyn Fn(Arc<str>, SharedString, &mut Window, &mut App) -> Option<Entity<ContextMenu>> + 'static,
 >;
-type ExtensionCardActions = [Option<Button>; 3];
+type ExtensionCardActions = [Option<Button>; 2];
 
 /// Local state of a published extension, derived from the `ExtensionStore`.
 #[derive(Clone)]
@@ -198,42 +198,12 @@ impl ExtensionCard {
         .on_click({
             let extension_id = extension_id.clone();
             move |_, _, cx| {
-                if !is_dev {
-                    telemetry::event!("Extension Uninstalled", extension_id);
-                }
+                if !is_dev {}
                 ExtensionStore::global(cx).update(cx, |store, cx| {
                     store
                         .uninstall_extension(extension_id.clone(), cx)
                         .detach_and_log_err(cx);
                 });
-            }
-        })
-    }
-
-    fn configure_button(
-        extension_id: &Arc<str>,
-        manifest: Option<Arc<ExtensionManifest>>,
-    ) -> Button {
-        Button::new(
-            SharedString::from(format!("configure-{extension_id}")),
-            t!("extensions_ui.extension_card.configure"),
-        )
-        .on_click({
-            let extension_id = extension_id.clone();
-            move |_, _, cx| {
-                let manifest = manifest.clone().or_else(|| {
-                    ExtensionStore::global(cx)
-                        .read(cx)
-                        .extension_manifest_for_id(&extension_id)
-                        .cloned()
-                });
-                if let Some(manifest) = manifest
-                    && let Some(events) = extension::ExtensionEvents::try_global(cx)
-                {
-                    events.update(cx, |this, cx| {
-                        this.emit(extension::Event::ConfigureExtensionRequested(manifest), cx)
-                    });
-                }
             }
         })
     }
@@ -267,20 +237,11 @@ impl ExtensionCard {
                 |button| button.style(ButtonStyle::OutlinedGhost),
             )
             .disabled(Self::disables_actions(status));
-        let configure = (!extension.context_servers.is_empty()).then(|| {
-            Self::configure_button(&extension.id, Some(extension.clone()))
-                .when_else(
-                    is_dev,
-                    |button| button.color(Color::Accent),
-                    |button| button.style(ButtonStyle::OutlinedGhost),
-                )
-                .disabled(Self::disables_actions(status))
-        });
 
         if is_dev {
-            [rebuild, Some(uninstall), configure]
+            [rebuild, Some(uninstall)]
         } else {
-            [None, configure, Some(uninstall)]
+            [None, Some(uninstall)]
         }
     }
 
@@ -298,7 +259,6 @@ impl ExtensionCard {
         .on_click({
             let extension_id = extension_id.clone();
             move |_, _, cx| {
-                telemetry::event!("Extension Installed");
                 ExtensionStore::global(cx).update(cx, |store, cx| {
                     store.install_latest_extension(extension_id.clone(), cx)
                 });
@@ -311,15 +271,9 @@ impl ExtensionCard {
         state: &PublishedExtensionState,
         cx: &App,
     ) -> ExtensionCardActions {
-        let is_configurable = extension
-            .manifest
-            .provides
-            .contains(&ExtensionProvides::ContextServers);
-
         let status = match state {
             PublishedExtensionState::OverriddenByDevExtension => {
                 return [
-                    None,
                     None,
                     Some(Self::install_button(&extension.id).disabled(true)),
                 ];
@@ -329,7 +283,6 @@ impl ExtensionCard {
 
         match status {
             ExtensionStatus::NotInstalled | ExtensionStatus::Installing => [
-                None,
                 None,
                 Some(Self::install_button(&extension.id).disabled(Self::disables_actions(status))),
             ],
@@ -344,12 +297,8 @@ impl ExtensionCard {
                     )
                     .disabled(Self::disables_actions(status))
                 });
-                let configure = is_configurable.then(|| {
-                    Self::configure_button(&extension.id, None)
-                        .disabled(Self::disables_actions(status))
-                });
 
-                [upgrade, configure, Some(uninstall)]
+                [upgrade, Some(uninstall)]
             }
             ExtensionStatus::Installed(installed_version) => {
                 let uninstall =
@@ -382,7 +331,6 @@ impl ExtensionCard {
                         let extension_id = extension.id.clone();
                         let version = extension.manifest.version.clone();
                         move |_, _, cx| {
-                            telemetry::event!("Extension Installed", extension_id, version);
                             ExtensionStore::global(cx).update(cx, |store, cx| {
                                 store
                                     .upgrade_extension(extension_id.clone(), version.clone(), cx)
@@ -391,11 +339,8 @@ impl ExtensionCard {
                         }
                     })
                 });
-                let configure = is_configurable.then(|| {
-                    Self::configure_button(&extension.id, None).style(ButtonStyle::OutlinedGhost)
-                });
 
-                [upgrade, configure, Some(uninstall)]
+                [upgrade, Some(uninstall)]
             }
         }
     }
@@ -420,24 +365,20 @@ fn provided_feature_labels(
 ) -> Vec<&'static str> {
     provides
         .into_iter()
-        .filter(|provides| !provides.is_deprecated())
-        .map(extension_provides_label)
+        .filter_map(extension_provides_label)
         .collect()
 }
 
-pub(crate) fn extension_provides_label(provides: ExtensionProvides) -> &'static str {
+pub(crate) fn extension_provides_label(provides: ExtensionProvides) -> Option<&'static str> {
     match provides {
-        ExtensionProvides::Themes => "Themes",
-        ExtensionProvides::IconThemes => "Icon Themes",
-        ExtensionProvides::Languages => "Languages",
-        ExtensionProvides::Grammars => "Grammars",
-        ExtensionProvides::LanguageServers => "Language Servers",
-        ExtensionProvides::ContextServers => "MCP Servers",
-        ExtensionProvides::AgentServers => "Agent Servers",
-        ExtensionProvides::SlashCommands => "Slash Commands",
-        ExtensionProvides::IndexedDocsProviders => "Indexed Docs Providers",
-        ExtensionProvides::Snippets => "Snippets",
-        ExtensionProvides::DebugAdapters => "Debug Adapters",
+        ExtensionProvides::Themes => Some("Themes"),
+        ExtensionProvides::IconThemes => Some("Icon Themes"),
+        ExtensionProvides::Languages => Some("Languages"),
+        ExtensionProvides::Grammars => Some("Grammars"),
+        ExtensionProvides::LanguageServers => Some("Language Servers"),
+        ExtensionProvides::Snippets => Some("Snippets"),
+        ExtensionProvides::DebugAdapters => Some("Debug Adapters"),
+        _ => None,
     }
 }
 
@@ -492,13 +433,11 @@ impl Component for ExtensionCard {
                 languages: Vec::new(),
                 grammars: Default::default(),
                 language_servers: Default::default(),
-                context_servers: Default::default(),
-                slash_commands: Default::default(),
+
                 snippets: None,
                 capabilities: Vec::new(),
                 debug_adapters: Default::default(),
                 debug_locators: Default::default(),
-                language_model_providers: Default::default(),
             })
         }
 

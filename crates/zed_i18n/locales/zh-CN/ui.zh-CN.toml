@@ -44,13 +44,3 @@ reset_key = "重置密钥"
 no_items = "暂无内容"
 
 [ui.ai_setting_item]
-status_stopped = "服务器已停止。"
-status_starting = "服务器正在启动。"
-status_running = "服务器运行中。"
-status_error = "服务器出现错误。"
-status_auth_required = "需要身份验证。"
-status_client_secret_required = "需要客户端密钥。"
-status_authenticating = "正在等待授权…"
-source_extension = "%{label} 已通过扩展安装。"
-source_registry = "%{label} 已通过 ACP 注册表安装。"
-source_custom = "%{label} 为手动配置。"

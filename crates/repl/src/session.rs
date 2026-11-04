@@ -4,7 +4,6 @@ use crate::{
     KernelStatus,
     kernels::{
         Kernel, KernelSession, KernelSpecification, NativeRunningKernel, RemoteRunningKernel,
-        SshRunningKernel, WslRunningKernel,
     },
     outputs::{
         ExecutionStatus, ExecutionView, ExecutionViewFinishedEmpty, ExecutionViewFinishedSmall,
@@ -270,40 +269,14 @@ impl Session {
         let kernel_language = self.kernel_specification.language();
         let entity_id = self.editor.entity_id();
 
-        // For WSL Remote kernels, use project root instead of potentially temporary working directory
         // which causes .venv/bin/python checks to fail
-        let is_remote_execution = matches!(
-            self.kernel_specification,
-            crate::KernelSpecification::WslRemote(_) | crate::KernelSpecification::SshRemote(_)
-        );
 
-        let working_directory = if is_remote_execution {
-            // For WSL Remote kernels, use project root instead of potentially temporary working directory
-            // which causes .venv/bin/python checks to fail
-            self.editor
-                .upgrade()
-                .and_then(|editor| editor.read(cx).project().cloned())
-                .and_then(|project| {
-                    project
-                        .read(cx)
-                        .worktrees(cx)
-                        .next()
-                        .map(|worktree| worktree.read(cx).abs_path().to_path_buf())
-                })
-                .unwrap_or_else(temp_dir)
-        } else {
+        let working_directory = {
             self.editor
                 .upgrade()
                 .and_then(|editor| editor.read(cx).working_directory(cx))
                 .unwrap_or_else(temp_dir)
         };
-
-        telemetry::event!(
-            "Kernel Status Changed",
-            kernel_language,
-            kernel_status = KernelStatus::Starting.to_string(),
-            repl_session_id = cx.entity_id().to_string(),
-        );
 
         let session_view = cx.entity();
 
@@ -335,33 +308,6 @@ impl Session {
                     cx,
                 )
             }
-            KernelSpecification::SshRemote(spec) => {
-                let project = self
-                    .editor
-                    .upgrade()
-                    .and_then(|editor| editor.read(cx).project().cloned());
-                if let Some(project) = project {
-                    SshRunningKernel::new(
-                        spec,
-                        working_directory,
-                        project,
-                        session_view,
-                        window,
-                        cx,
-                    )
-                } else {
-                    Task::ready(Err(anyhow::anyhow!("No project associated with editor")))
-                }
-            }
-            KernelSpecification::WslRemote(spec) => WslRunningKernel::new(
-                spec,
-                entity_id,
-                working_directory,
-                self.fs.clone(),
-                session_view,
-                window,
-                cx,
-            ),
         };
 
         let pending_kernel = cx
@@ -827,13 +773,6 @@ impl Session {
         let kernel_status = KernelStatus::from(&kernel).to_string();
         let kernel_language = self.kernel_specification.language();
 
-        telemetry::event!(
-            "Kernel Status Changed",
-            kernel_language,
-            kernel_status,
-            repl_session_id = cx.entity_id().to_string(),
-        );
-
         self.kernel = kernel;
     }
 
@@ -991,13 +930,6 @@ impl KernelSession for Session {
         match &message.content {
             JupyterMessageContent::Status(status) => {
                 self.kernel.set_execution_state(&status.execution_state);
-
-                telemetry::event!(
-                    "Kernel Status Changed",
-                    kernel_language = self.kernel_specification.language(),
-                    kernel_status = KernelStatus::from(&self.kernel).to_string(),
-                    repl_session_id = cx.entity_id().to_string(),
-                );
 
                 cx.notify();
             }

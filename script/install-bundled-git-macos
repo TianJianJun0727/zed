@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+app_bundle="${1:?Usage: install-bundled-git-macos <Zed Lite.app>}"
+test "$(plutil -extract CFBundleIdentifier raw "$app_bundle/Contents/Info.plist")" = io.github.tianjianjun0727.zed-lite
+
+git_distribution_dir="$(mktemp -d)"
+trap 'rm -rf "$git_distribution_dir"' EXIT
+git_bundle_dir="$app_bundle/Contents/Resources/git"
+curl --fail --location https://github.com/desktop/dugite-native/releases/download/v2.43.3/dugite-native-v2.43.3-fa29823-macOS-arm64.tar.gz -o "$git_distribution_dir/distribution.tar.gz"
+rm -rf "$git_bundle_dir"
+mkdir -p "$git_bundle_dir"
+tar -xzf "$git_distribution_dir/distribution.tar.gz" -C "$git_bundle_dir"
+curl --fail --location https://raw.githubusercontent.com/git/git/v2.43.3/COPYING -o "$git_bundle_dir/COPYING"
+test -x "$git_bundle_dir/bin/git"
+test -x "$git_bundle_dir/libexec/git-core/git-remote-https"
+
+cat > "$app_bundle/Contents/MacOS/git" <<'GIT_WRAPPER'
+#!/bin/sh
+set -eu
+git_root=$(CDPATH= cd -- "${0%/*}/../Resources/git" && pwd)
+if [ -z "${GIT_EXEC_PATH:-}" ]; then
+    GIT_EXEC_PATH="$git_root/libexec/git-core"
+    export GIT_EXEC_PATH
+fi
+exec "$git_root/bin/git" "$@"
+GIT_WRAPPER
+chmod +x "$app_bundle/Contents/MacOS/git"
+
+find "$git_bundle_dir" -type f -print0 | while IFS= read -r -d '' git_file; do
+    if file -b "$git_file" | grep -q 'Mach-O'; then
+        codesign --force --sign - "$git_file"
+    fi
+done

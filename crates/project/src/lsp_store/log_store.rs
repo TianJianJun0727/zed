@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use collections::{HashMap, HashSet};
+use collections::HashMap;
 use futures::{StreamExt, channel::mpsc};
 use gpui::{
     App, AppContext as _, Context, Entity, EventEmitter, Global, Subscription, TaskExt, WeakEntity,
@@ -16,15 +16,14 @@ use lsp::{
 use rpc::proto;
 use serde::Deserialize;
 use settings::WorktreeId;
-use util::ResultExt as _;
 
 use crate::{LanguageServerLogType, LspStore, Project, ProjectItem as _};
 
 const MAX_STORED_LOG_ENTRIES: usize = 2000;
 const MAX_PENDING_REQUESTS: usize = MAX_STORED_LOG_ENTRIES;
 
-pub fn init(on_headless_host: bool, cx: &mut App) -> Entity<LogStore> {
-    let log_store = cx.new(|cx| LogStore::new(on_headless_host, cx));
+pub fn init(cx: &mut App) -> Entity<LogStore> {
+    let log_store = cx.new(|cx| LogStore::new(cx));
     cx.set_global(GlobalLogStore(log_store.clone()));
     log_store
 }
@@ -45,7 +44,6 @@ pub enum Event {
 impl EventEmitter<Event> for LogStore {}
 
 pub struct LogStore {
-    on_headless_host: bool,
     projects: HashMap<WeakEntity<Project>, ProjectState>,
     pub language_servers: HashMap<LanguageServerLogKey, LanguageServerState>,
     next_server_generation: usize,
@@ -54,8 +52,6 @@ pub struct LogStore {
 
 struct ProjectState {
     _subscriptions: [Subscription; 2],
-    copilot_server_id: Option<LanguageServerId>,
-    copilot_log_subscription: Option<lsp::Subscription>,
 }
 
 pub trait Message: AsRef<str> {
@@ -145,7 +141,6 @@ pub struct LanguageServerState {
     pub log_level: MessageType,
     io_logs_subscription: Option<lsp::Subscription>,
     view_log_stream_refcounts: HashMap<LogKind, usize>,
-    downstream_log_streams: HashMap<proto::PeerId, HashSet<LogKind>>,
 }
 
 impl LanguageServerState {
@@ -157,14 +152,8 @@ impl LanguageServerState {
         self.view_log_stream_refcounts.contains_key(&log_kind)
     }
 
-    fn has_downstream_log_stream(&self, log_kind: LogKind) -> bool {
-        self.downstream_log_streams
-            .values()
-            .any(|log_kinds| log_kinds.contains(&log_kind))
-    }
-
     fn has_log_stream(&self, log_kind: LogKind) -> bool {
-        self.has_view_log_stream(log_kind) || self.has_downstream_log_stream(log_kind)
+        self.has_view_log_stream(log_kind)
     }
 
     fn synchronize_rpc_state(&mut self) {
@@ -193,7 +182,6 @@ impl std::fmt::Debug for LanguageServerState {
             .field("trace_level", &self.trace_level)
             .field("log_level", &self.log_level)
             .field("view_log_stream_refcounts", &self.view_log_stream_refcounts)
-            .field("downstream_log_streams", &self.downstream_log_streams)
             .finish_non_exhaustive()
     }
 }
@@ -201,8 +189,7 @@ impl std::fmt::Debug for LanguageServerState {
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum LanguageServerKind {
     Local { project: WeakEntity<Project> },
-    Remote { project: WeakEntity<Project> },
-    LocalSsh { lsp_store: WeakEntity<LspStore> },
+
     Supplementary { project: WeakEntity<Project> },
 }
 
@@ -210,8 +197,7 @@ impl std::fmt::Debug for LanguageServerKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LanguageServerKind::Local { .. } => write!(f, "LanguageServerKind::Local"),
-            LanguageServerKind::Remote { .. } => write!(f, "LanguageServerKind::Remote"),
-            LanguageServerKind::LocalSsh { .. } => write!(f, "LanguageServerKind::LocalSsh"),
+
             LanguageServerKind::Supplementary { .. } => {
                 write!(f, "LanguageServerKind::Supplementary")
             }
@@ -242,10 +228,7 @@ impl LanguageServerLogKey {
 impl LanguageServerKind {
     pub fn project(&self) -> Option<&WeakEntity<Project>> {
         match self {
-            Self::Local { project }
-            | Self::Remote { project }
-            | Self::Supplementary { project } => Some(project),
-            Self::LocalSsh { .. } => None,
+            Self::Local { project } | Self::Supplementary { project } => Some(project),
         }
     }
 
@@ -258,15 +241,9 @@ impl LanguageServerKind {
             Self::Local {
                 project: server_project,
             }
-            | Self::Remote {
-                project: server_project,
-            }
             | Self::Supplementary {
                 project: server_project,
             } => server_project == project,
-            Self::LocalSsh {
-                lsp_store: server_lsp_store,
-            } => server_lsp_store == lsp_store,
         }
     }
 }
@@ -469,19 +446,10 @@ impl LogKind {
             LanguageServerLogType::Rpc { .. } => Self::Rpc,
         }
     }
-
-    fn to_proto(self) -> Option<proto::toggle_lsp_logs::LogType> {
-        match self {
-            Self::Rpc => Some(proto::toggle_lsp_logs::LogType::Rpc),
-            Self::Trace => Some(proto::toggle_lsp_logs::LogType::Trace),
-            Self::Logs => Some(proto::toggle_lsp_logs::LogType::Log),
-            Self::ServerInfo => None,
-        }
-    }
 }
 
 impl LogStore {
-    pub fn new(on_headless_host: bool, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let (io_tx, mut io_rx) = mpsc::unbounded();
 
         let log_store = Self {
@@ -489,7 +457,6 @@ impl LogStore {
             language_servers: HashMap::default(),
             next_server_generation: 0,
 
-            on_headless_host,
             io_tx,
         };
         cx.spawn(async move |log_store, cx| {
@@ -519,15 +486,9 @@ impl LogStore {
                             .retain(|key, _| key.kind.project() != Some(&weak_project));
                     }),
                     cx.subscribe(project, move |log_store, project, event, cx| {
-                        let is_local = project.read(cx).is_local();
-                        let primary_server_kind = if is_local {
-                            LanguageServerKind::Local {
-                                project: project.downgrade(),
-                            }
-                        } else {
-                            LanguageServerKind::Remote {
-                                project: project.downgrade(),
-                            }
+                        let is_local = true;
+                        let primary_server_kind = LanguageServerKind::Local {
+                            project: project.downgrade(),
                         };
                         let server_kind_for_id = |log_store: &LogStore, server_id| {
                             // Remote project events carry host-side server IDs, which may
@@ -671,59 +632,11 @@ impl LogStore {
                                     }
                                 }
                             }
-                            crate::Event::ToggleLspLogs {
-                                peer_id,
-                                server_id,
-                                enabled,
-                                toggled_log_kind,
-                            } => {
-                                let server_key = LanguageServerLogKey::new(
-                                    server_kind_for_id(log_store, *server_id),
-                                    *server_id,
-                                );
-                                log_store.set_downstream_log_stream(
-                                    &server_key,
-                                    *peer_id,
-                                    *toggled_log_kind,
-                                    *enabled,
-                                    cx,
-                                );
-                            }
-                            crate::Event::CollaboratorLeft(peer_id) => {
-                                log_store.release_downstream_log_streams(
-                                    &project.downgrade(),
-                                    Some(*peer_id),
-                                    cx,
-                                );
-                            }
-                            crate::Event::RemoteIdChanged(None) => {
-                                log_store.release_downstream_log_streams(
-                                    &project.downgrade(),
-                                    None,
-                                    cx,
-                                );
-                            }
-                            crate::Event::CollaboratorUpdated {
-                                old_peer_id,
-                                new_peer_id,
-                            } => {
-                                log_store.update_downstream_peer_id(
-                                    &project.downgrade(),
-                                    *old_peer_id,
-                                    *new_peer_id,
-                                );
-                            }
-                            crate::Event::Rejoined | crate::Event::HostReshared => {
-                                // The host can miss a peer-ID update while offline. Synchronize on
-                                // either side's return, since the guest can rejoin first.
-                                log_store.synchronize_log_streams(&project.downgrade(), cx);
-                            }
+
                             _ => {}
                         }
                     }),
                 ],
-                copilot_server_id: None,
-                copilot_log_subscription: None,
             },
         );
     }
@@ -764,7 +677,6 @@ impl LogStore {
                     log_level: MessageType::LOG,
                     io_logs_subscription: None,
                     view_log_stream_refcounts: HashMap::default(),
-                    downstream_log_streams: HashMap::default(),
                 }
             });
 
@@ -810,7 +722,7 @@ impl LogStore {
         message: &str,
         cx: &mut Context<Self>,
     ) -> Option<()> {
-        let store_logs = !self.on_headless_host;
+        let store_logs = true;
         let language_server_state = self.get_language_server_state(key)?;
 
         let log_lines = &mut language_server_state.log_messages;
@@ -849,7 +761,7 @@ impl LogStore {
         verbose_info: Option<String>,
         cx: &mut Context<Self>,
     ) -> Option<()> {
-        let store_logs = !self.on_headless_host;
+        let store_logs = true;
         let language_server_state = self.get_language_server_state(key)?;
 
         let log_lines = &mut language_server_state.trace_messages;
@@ -916,7 +828,7 @@ impl LogStore {
         timing: RpcTiming,
         cx: &mut Context<'_, Self>,
     ) {
-        let store_logs = !self.on_headless_host;
+        let store_logs = true;
         let Some(state) = self
             .get_language_server_state(key)
             .and_then(|state| state.rpc_state.as_mut())
@@ -1038,34 +950,6 @@ impl LogStore {
     }
 
     fn emit_event(&mut self, e: Event, cx: &mut Context<Self>) {
-        match &e {
-            Event::NewServerLogEntry { key, kind, text } => {
-                if let Some(state) = self.get_language_server_state(key) {
-                    let downstream_client = match &key.kind {
-                        LanguageServerKind::Remote { project }
-                        | LanguageServerKind::Local { project } => project
-                            .upgrade()
-                            .map(|project| project.read(cx).lsp_store()),
-                        LanguageServerKind::LocalSsh { lsp_store } => lsp_store.upgrade(),
-                        LanguageServerKind::Supplementary { .. } => None,
-                    }
-                    .and_then(|lsp_store| lsp_store.read(cx).downstream_client());
-                    if let Some((client, project_id)) = downstream_client {
-                        if state.has_downstream_log_stream(LogKind::from_server_log_type(kind)) {
-                            client
-                                .send(proto::LanguageServerLog {
-                                    project_id,
-                                    language_server_id: key.server_id.to_proto(),
-                                    message: text.clone(),
-                                    log_type: Some(kind.to_proto()),
-                                })
-                                .ok();
-                        }
-                    }
-                }
-            }
-        }
-
         cx.emit(e);
     }
 
@@ -1105,81 +989,6 @@ impl LogStore {
         )
     }
 
-    pub fn set_downstream_log_stream(
-        &mut self,
-        key: &LanguageServerLogKey,
-        peer_id: proto::PeerId,
-        log_kind: LogKind,
-        enabled: bool,
-        cx: &mut Context<Self>,
-    ) -> Option<()> {
-        self.update_log_stream_ownership(
-            key,
-            log_kind,
-            |state| {
-                if enabled {
-                    state
-                        .downstream_log_streams
-                        .entry(peer_id)
-                        .or_default()
-                        .insert(log_kind);
-                } else if let Some(log_kinds) = state.downstream_log_streams.get_mut(&peer_id) {
-                    log_kinds.remove(&log_kind);
-                    if log_kinds.is_empty() {
-                        state.downstream_log_streams.remove(&peer_id);
-                    }
-                }
-            },
-            cx,
-        )
-    }
-
-    fn release_downstream_log_streams(
-        &mut self,
-        project: &WeakEntity<Project>,
-        peer_id: Option<proto::PeerId>,
-        cx: &mut Context<Self>,
-    ) {
-        let mut streams = Vec::new();
-        for (key, state) in &self.language_servers {
-            if key.kind.project() != Some(project) {
-                continue;
-            }
-            for (downstream_peer_id, log_kinds) in &state.downstream_log_streams {
-                if peer_id.is_none_or(|peer_id| peer_id == *downstream_peer_id) {
-                    streams.extend(
-                        log_kinds
-                            .iter()
-                            .map(|log_kind| (key.clone(), *downstream_peer_id, *log_kind)),
-                    );
-                }
-            }
-        }
-
-        for (key, peer_id, log_kind) in streams {
-            self.set_downstream_log_stream(&key, peer_id, log_kind, false, cx);
-        }
-    }
-
-    fn update_downstream_peer_id(
-        &mut self,
-        project: &WeakEntity<Project>,
-        old_peer_id: proto::PeerId,
-        new_peer_id: proto::PeerId,
-    ) {
-        for (key, state) in &mut self.language_servers {
-            if key.kind.project() == Some(project)
-                && let Some(log_kinds) = state.downstream_log_streams.remove(&old_peer_id)
-            {
-                state
-                    .downstream_log_streams
-                    .entry(new_peer_id)
-                    .or_default()
-                    .extend(log_kinds);
-            }
-        }
-    }
-
     fn update_log_stream_ownership(
         &mut self,
         key: &LanguageServerLogKey,
@@ -1198,118 +1007,6 @@ impl LogStore {
             (was_enabled, is_enabled)
         };
 
-        if was_enabled != is_enabled {
-            Self::send_toggle_log_message(key, is_enabled, log_kind, cx);
-        }
-        Some(())
-    }
-
-    fn synchronize_log_streams(&self, project: &WeakEntity<Project>, cx: &mut App) {
-        for (key, state) in &self.language_servers {
-            if !matches!(&key.kind, LanguageServerKind::Remote { project: server_project } if server_project == project)
-            {
-                continue;
-            }
-            // Disables sent while disconnected were lost, but the host may have
-            // migrated those obsolete subscriptions to our new peer ID.
-            for log_kind in [LogKind::Logs, LogKind::Trace, LogKind::Rpc] {
-                Self::send_toggle_log_message(key, state.has_log_stream(log_kind), log_kind, cx);
-            }
-        }
-    }
-
-    fn send_toggle_log_message(
-        key: &LanguageServerLogKey,
-        enabled: bool,
-        log_kind: LogKind,
-        cx: &mut App,
-    ) {
-        let LanguageServerKind::Remote { project } = &key.kind else {
-            return;
-        };
-        let Some(log_type) = log_kind.to_proto() else {
-            return;
-        };
-        let Some(project) = project.upgrade() else {
-            return;
-        };
-        let lsp_store = project.read(cx).lsp_store();
-        let Some((client, project_id)) = lsp_store.read(cx).upstream_client() else {
-            return;
-        };
-        client
-            .send(proto::ToggleLspLogs {
-                project_id,
-                log_type: log_type as i32,
-                server_id: key.server_id.to_proto(),
-                enabled,
-            })
-            .log_err();
-    }
-
-    pub fn sync_copilot_for_project(
-        &mut self,
-        project: &WeakEntity<Project>,
-        server: Option<Arc<LanguageServer>>,
-        cx: &mut Context<Self>,
-    ) -> Option<()> {
-        let server_kind = LanguageServerKind::Supplementary {
-            project: project.clone(),
-        };
-        let current_server_id = server.as_ref().map(|server| server.server_id());
-        let current_server_matches = server.as_ref().is_some_and(|server| {
-            let server_key = LanguageServerLogKey::new(server_kind.clone(), server.server_id());
-            self.language_servers
-                .get(&server_key)
-                .and_then(|state| state.server())
-                .is_some_and(|current_server| Arc::ptr_eq(&current_server, server))
-        });
-        let project_state = self.projects.get_mut(project)?;
-        if project_state.copilot_server_id == current_server_id && current_server_matches {
-            return Some(());
-        }
-
-        project_state.copilot_log_subscription = None;
-        let previous_server_id = project_state.copilot_server_id.take();
-        if previous_server_id != current_server_id
-            && let Some(previous_server_id) = previous_server_id
-        {
-            let previous_server_key =
-                LanguageServerLogKey::new(server_kind.clone(), previous_server_id);
-            self.remove_language_server(&previous_server_key, cx);
-        }
-
-        let Some(server) = server else {
-            return Some(());
-        };
-        let server_id = server.server_id();
-        let server_key = LanguageServerLogKey::new(server_kind.clone(), server_id);
-        let weak_log_store = cx.weak_entity();
-        let log_subscription =
-            server.on_notification::<lsp::notification::LogMessage, _>(move |params, cx| {
-                weak_log_store
-                    .update(cx, |log_store, cx| {
-                        log_store.add_language_server_log(
-                            &server_key,
-                            MessageType::LOG,
-                            &params.message,
-                            cx,
-                        );
-                    })
-                    .ok();
-            });
-        self.add_language_server(
-            server_kind,
-            server_id,
-            Some(LanguageServerName::new_static("copilot")),
-            None,
-            Some(server),
-            cx,
-        );
-
-        let project_state = self.projects.get_mut(project)?;
-        project_state.copilot_server_id = Some(server_id);
-        project_state.copilot_log_subscription = Some(log_subscription);
         Some(())
     }
 }

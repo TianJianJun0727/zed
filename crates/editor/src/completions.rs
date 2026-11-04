@@ -92,10 +92,10 @@ impl Editor {
     }
 
     pub fn has_visible_completions_menu(&self) -> bool {
-        !self.edit_prediction_preview_is_active()
-            && self.context_menu.borrow().as_ref().is_some_and(|menu| {
-                menu.visible() && matches!(menu, CodeContextMenu::Completions(_))
-            })
+        self.context_menu
+            .borrow()
+            .as_ref()
+            .is_some_and(|menu| menu.visible() && matches!(menu, CodeContextMenu::Completions(_)))
     }
 
     pub(super) fn trigger_completion_on_input(
@@ -212,20 +212,8 @@ impl Editor {
             return None;
         }
 
-        // OnTypeFormatting returns a list of edits, no need to pass them between Zed instances,
-        // hence we do LSP request & edit on host side only — add formats to host's history.
-        let push_to_lsp_host_history = true;
-        // If this is not the host, append its history with new edits.
-        let push_to_client_history = project.read(cx).is_via_collab();
-
         let on_type_formatting = project.update(cx, |project, cx| {
-            project.on_type_format(
-                buffer.clone(),
-                buffer_position,
-                input,
-                push_to_lsp_host_history,
-                cx,
-            )
+            project.on_type_format(buffer.clone(), buffer_position, input, true, cx)
         })?;
 
         // Cursors are right-biased, so an edit inserting text at one drags it along. Pin a
@@ -245,10 +233,6 @@ impl Editor {
                     let formatted_ranges = buffer
                         .edited_ranges_for_transaction::<usize>(&transaction)
                         .collect::<Vec<_>>();
-                    if push_to_client_history {
-                        buffer.push_transaction(transaction, Instant::now());
-                        buffer.finalize_last_transaction();
-                    }
                     (buffer.remote_id(), formatted_ranges)
                 });
                 editor.update_in(cx, |editor, window, cx| {
@@ -788,12 +772,6 @@ impl Editor {
                             Some(CodeContextMenu::Completions(menu));
 
                         crate::hover_popover::hide_hover(editor, cx);
-                        if editor.show_edit_predictions_in_menu() {
-                            editor.update_visible_edit_prediction(window, cx);
-                        } else {
-                            editor
-                                .discard_edit_prediction(EditPredictionDiscardReason::Ignored, cx);
-                        }
 
                         cx.notify();
                         return;
@@ -801,12 +779,7 @@ impl Editor {
 
                     if editor.completion_tasks.len() <= 1 {
                         // If there are no more completion tasks and the last menu was empty, we should hide it.
-                        let was_hidden = editor.hide_context_menu(window, cx).is_none();
-                        // If it was already hidden and we don't show edit predictions in the menu,
-                        // we should also show the edit prediction when available.
-                        if was_hidden && editor.show_edit_predictions_in_menu() {
-                            editor.update_visible_edit_prediction(window, cx);
-                        }
+                        editor.hide_context_menu(window, cx);
                     }
                 })
                 .ok();
@@ -863,9 +836,6 @@ impl Editor {
             let entries = completions_menu.entries.borrow();
             let entry = entries.get(item_ix.unwrap_or(completions_menu.selected_item))?;
             let mat = entry.as_match()?;
-            if self.show_edit_predictions_in_menu() {
-                self.discard_edit_prediction(EditPredictionDiscardReason::Rejected, cx);
-            }
             mat.candidate_id
         };
 
@@ -1000,13 +970,6 @@ impl Editor {
                 });
             }
             linked_edits.apply(cx);
-            editor.refresh_edit_prediction(
-                true,
-                false,
-                EditPredictionRequestTrigger::LSPCompletionAccepted,
-                window,
-                cx,
-            );
         });
         self.invalidate_autoclose_regions(
             &self.selections.disjoint_anchors_arc(),
